@@ -535,32 +535,177 @@ Nombre Achuar: [from community recordings]
 
 ## 3. Technical Architecture
 
-### 3.1 Tech Stack (No Firebase - Supabase Only)
+### 3.0 System Overview (Cloud-First Architecture)
+
+**The project has TWO main components to build:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        CLOUD PROCESSING PIPELINE                            │
+│                        (Built as part of project)                           │
+│  ┌─────────────────┐    ┌──────────────────────┐    ┌───────────────────┐  │
+│  │  Trail Cameras  │───▶│  Object Detection    │───▶│                   │  │
+│  │  (raw video/    │    │  (MegaDetector V6)   │    │    Supabase       │  │
+│  │   photos)       │    │  - animal/human/boat │    │    Database       │  │
+│  └─────────────────┘    └──────────────────────┘    │    + Storage      │  │
+│                                                      │                   │  │
+│  ┌─────────────────┐    ┌──────────────────────┐    │  (processed       │  │
+│  │  Audio Devices  │───▶│  Audio Processing    │───▶│   results only)   │  │
+│  │  (raw audio)    │    │  - transcription     │    │                   │  │
+│  │                 │    │  - speaker detection │    │                   │  │
+│  └─────────────────┘    └──────────────────────┘    └─────────┬─────────┘  │
+│                                                                │            │
+│  ┌─────────────────┐    ┌──────────────────────┐              │            │
+│  │  App Voice      │───▶│  Speech-to-Text      │──────────────┘            │
+│  │  Recordings     │    │  + Embeddings (RAG)  │                           │
+│  └─────────────────┘    └──────────────────────┘                           │
+└────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       │ Supabase Realtime
+                                       ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                            MOBILE APP                                       │
+│                      (Built as part of project)                            │
+│                                                                            │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────────────┐   │
+│  │   📷       │  │   🗺️      │  │   💬       │  │   🎤               │   │
+│  │  Gallery   │  │   Map      │  │   Chat     │  │  Voice Recording   │   │
+│  │  (view)    │  │  (view)    │  │  (AI)      │  │  (upload to cloud) │   │
+│  └────────────┘  └────────────┘  └────────────┘  └────────────────────┘   │
+│                                                                            │
+│  App is a VIEWER + RECORDER - no heavy processing on device               │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### What Each Component Does
+
+| Component | Responsibility | Where It Runs |
+|-----------|---------------|---------------|
+| **Trail Cameras** | Capture raw video/photos on motion | Field (Ecuador) |
+| **Audio Devices** | Capture ambient audio (optional) | Field (Ecuador) |
+| **Cloud Pipeline** | Process video (MegaDetector), transcribe audio, store results | Cloud (Supabase Edge Functions / external server) |
+| **Mobile App** | Display processed data, record voice, chat with AI | User's phone |
+
+### Data Flow
+
+```
+1. CAPTURE
+   Trail camera detects motion → uploads raw video/photos to cloud
+   Audio device captures sound → uploads raw audio to cloud
+   User records voice in app → uploads to cloud
+
+2. PROCESS (Cloud)
+   MegaDetector analyzes video → classifies as animal/human/boat/other
+   Audio processor transcribes → generates text + embeddings
+   iNaturalist API → identifies species from best photo
+   Results stored in Supabase with metadata
+
+3. DELIVER (App)
+   App fetches processed observations from Supabase
+   App displays photos/videos/audio with classifications
+   App receives real-time notifications for new events
+   App queries AI (enriched by community recordings via RAG)
+```
+
+### 3.1 Tech Stack
 
 | Layer | Technology | Rationale |
 |-------|-----------|-----------|
-| **Mobile App** | React Native | Cross-platform, large ecosystem, good offline support |
-| **Backend** | Supabase | PostgreSQL, auth, storage, real-time, edge functions |
-| **Notifications** | Supabase Realtime + Expo Notifications | No Firebase dependency, works with React Native |
-| **AI Detection** | MegaDetector V6 | Free, open source, 95%+ accuracy on camera trap images |
+| **Mobile App** | React Native + Expo | Cross-platform, large ecosystem, good offline support |
+| **Backend/Database** | Supabase | PostgreSQL, auth, storage, real-time, edge functions |
+| **Cloud Processing** | Supabase Edge Functions or external server | Run MegaDetector, transcription |
+| **Object Detection** | MegaDetector V6 | Free, open source, 95%+ accuracy on camera trap images |
+| **Audio Transcription** | Whisper API / Google Speech-to-Text | Spanish transcription (Achuar stored as audio) |
 | **Species ID** | iNaturalist API | Free, community verification, Ecuador species database |
 | **RAG + Facts** | Perplexity/Gemini API | Facts generation with community knowledge enrichment |
 | **Vector Search** | Supabase pgvector | For RAG similarity matching on voice transcriptions |
 | **Media Storage** | Supabase Storage | Integrated with database, cheaper than S3 |
-| **Camera Streaming** | RTSP via VLC/ExoPlayer | Standard protocol, most trail cams support |
+| **Notifications** | Supabase Realtime + Expo Notifications | No Firebase dependency |
 
-**Notification Architecture (No Firebase):**
+### 3.2 Cloud Processing Pipeline (Detail)
+
+**This is built separately from the mobile app but is part of the project.**
+
 ```
-Camera event → Supabase Edge Function → Insert to notifications table
-                                              ↓
-                                    Supabase Realtime broadcast
-                                              ↓
-                               App receives via WebSocket subscription
-                                              ↓
-                               Expo Notifications shows local notification
+┌─────────────────────────────────────────────────────────────────┐
+│                  CLOUD PROCESSING PIPELINE                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  INPUT: Raw media uploaded to Supabase Storage                  │
+│         └── Triggers Supabase Edge Function or webhook          │
+│                                                                 │
+│  STEP 1: Object Detection (MegaDetector V6)                     │
+│         ├── Input: video/photo from camera                      │
+│         ├── Output: bounding boxes + classification             │
+│         │   - animal (confidence score)                         │
+│         │   - human (confidence score)                          │
+│         │   - boat/vehicle (confidence score)                   │
+│         └── Crops best animal image for species ID              │
+│                                                                 │
+│  STEP 2: Species Identification (if animal detected)            │
+│         ├── Input: cropped animal image                         │
+│         ├── API: iNaturalist Computer Vision                    │
+│         └── Output: species name, taxon ID, confidence          │
+│                                                                 │
+│  STEP 3: Audio Transcription (for voice recordings)             │
+│         ├── Input: audio file from app or field device          │
+│         ├── API: Whisper / Google Speech-to-Text                │
+│         ├── Language: Spanish (es)                              │
+│         └── Output: transcription text                          │
+│                                                                 │
+│  STEP 4: Embedding Generation (for RAG)                         │
+│         ├── Input: transcription text                           │
+│         ├── API: OpenAI embeddings / Supabase pgvector          │
+│         └── Output: vector embedding stored in DB               │
+│                                                                 │
+│  STEP 5: Store Results in Supabase                              │
+│         ├── observations table (detection results)              │
+│         ├── species table (identified species)                  │
+│         ├── voice_recordings table (transcription + embedding)  │
+│         └── Trigger real-time notification to app               │
+│                                                                 │
+│  OUTPUT: Processed data available via Supabase API              │
+│          App fetches and displays to user                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 Open Source Dependencies
+**Deployment Options for Cloud Pipeline:**
+1. **Supabase Edge Functions** - Simple, integrated, good for light processing
+2. **External Server (Python)** - Better for heavy ML like MegaDetector
+3. **Modal / Replicate** - Serverless GPU for MegaDetector inference
+4. **Hybrid** - Edge functions for routing, external for ML
+
+### 3.3 Mobile App Responsibilities (Detail)
+
+**The app does NOT do heavy processing - it's a viewer + recorder.**
+
+| App Does | App Does NOT Do |
+|----------|-----------------|
+| Fetch processed data from Supabase | Run MegaDetector |
+| Display photos/videos/audio | Process raw camera streams |
+| Record voice → upload to cloud | Transcribe audio on-device |
+| Show map with observation pins | Run species identification |
+| Chat with AI (via API) | Generate embeddings |
+| Receive real-time notifications | Heavy ML inference |
+| Cache data for offline viewing | |
+
+### 3.4 Notification Flow
+
+```
+Camera uploads video → Cloud processes → MegaDetector detects jaguar
+                                              ↓
+                              Insert to observations table
+                                              ↓
+                              Supabase Realtime broadcasts event
+                                              ↓
+                              App receives via WebSocket
+                                              ↓
+                              Expo shows local notification:
+                              "🐆 Jaguar detectado en Cámara 3"
+```
+
+### 3.5 Open Source Dependencies
 
 | Repository | Purpose | License |
 |------------|---------|---------|
@@ -990,30 +1135,47 @@ Given remote Amazon location:
 
 ## 9. Implementation Phases
 
-### Phase 1: MVP (8-10 weeks development)
-- [ ] Supabase backend setup (auth, database, storage)
-- [ ] React Native app scaffold with ultra-simple UI
-- [ ] **Voice recording system** (record, save, playback) - CRITICAL
-- [ ] Camera feed viewing (live + archive)
-- [ ] MegaDetector integration for classification
-- [ ] Basic notification system (4 categories)
-- [ ] Species glossary with large photo cards
-- [ ] Voice notes on species pages
-- [ ] Two-tier login (leaders vs community)
-- [ ] Animated onboarding tutorial
+### Phase 1: MVP - Two Parallel Workstreams
 
-### Phase 2: Intelligence (4-6 weeks)
-- [ ] iNaturalist API integration
-- [ ] Perplexity API for species facts
+**The project has two components that can be developed in parallel:**
+
+#### Workstream A: Cloud Processing Pipeline
+- [ ] Supabase project setup (database, storage, edge functions)
+- [ ] Camera upload endpoint (receive raw video/photos)
+- [ ] MegaDetector integration (animal/human/boat classification)
+- [ ] iNaturalist API integration (species identification)
+- [ ] Audio transcription pipeline (Whisper/Google STT)
+- [ ] Embedding generation for RAG (pgvector)
+- [ ] Real-time notification triggers
+
+#### Workstream B: Mobile App
+- [ ] React Native + Expo scaffold
+- [ ] 3-tab swipeable navigation (Map, Gallery, Chat)
+- [ ] Gallery screen (fetch & display processed photos/videos/audio)
+- [ ] Voice recording (record → upload to cloud)
+- [ ] Chat screen with AI integration
+- [ ] Map screen with observation pins
+- [ ] Two-tier login (Elder pattern lock vs General)
+- [ ] Real-time notification listener
+
+#### Integration
+- [ ] Connect app to cloud pipeline
+- [ ] End-to-end test: camera → cloud → app
+- [ ] Offline caching for app
+
+### Phase 2: Intelligence & Polish
+- [ ] RAG enrichment (community recordings enhance AI responses)
+- [ ] Perplexity/Gemini API for species facts
 - [ ] Species-specific notifications
 - [ ] Behavior tagging system
-- [ ] Cultural significance section with moderation
+- [ ] Animated onboarding tutorial
 
-### Phase 3: Advanced (4-6 weeks)
-- [ ] Satellite map with camera locations
-- [ ] Illegal logging dedicated module
+### Phase 3: Advanced Features
+- [ ] Satellite map with heatmaps
+- [ ] Illegal logging dedicated module (Elder only)
 - [ ] Analytics dashboard
 - [ ] Export/reporting features
+- [ ] Full offline support
 
 ---
 

@@ -29,12 +29,37 @@ npx expo start
 - [Achuar Language Resources](docs/ACHUAR-LANGUAGE-RESOURCES.md)
 - [Tutorials](docs/tutorials/)
 
+## Architecture
+
+This project has **two main components**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              CLOUD PROCESSING PIPELINE                      │
+│  Trail Cameras ──▶ MegaDetector ──▶ Supabase Database      │
+│  Audio Devices ──▶ Transcription ──▶      ↓                │
+│  App Recordings ──▶ Embeddings ───▶       │                │
+└───────────────────────────────────────────┼─────────────────┘
+                                            │ Realtime
+                                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    MOBILE APP                               │
+│  Gallery (view) │ Map (view) │ Chat (AI) │ Voice (record)  │
+│         App is a VIEWER + RECORDER (no heavy processing)    │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ## Tech Stack
 
-- **Frontend**: React Native + Expo
-- **Backend**: Supabase (PostgreSQL, Auth, Storage, Realtime)
-- **AI**: Perplexity/Gemini API
-- **Maps**: React Native Maps
+| Component | Technology |
+|-----------|------------|
+| **Mobile App** | React Native + Expo |
+| **Backend** | Supabase (PostgreSQL, Auth, Storage, Realtime) |
+| **Object Detection** | MegaDetector V6 (cloud) |
+| **Audio Transcription** | Whisper / Google STT (cloud) |
+| **Species ID** | iNaturalist API |
+| **AI Chat** | Perplexity/Gemini API |
+| **Maps** | React Native Maps |
 
 ## Project Structure
 
