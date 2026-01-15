@@ -26,6 +26,7 @@ npx expo start
 
 - [Product Requirements (PRD)](docs/PRD.md)
 - [Development Setup](docs/SETUP.md)
+- [Achuar Language Resources](docs/ACHUAR-LANGUAGE-RESOURCES.md)
 - [Tutorials](docs/tutorials/)
 
 ## Tech Stack
