@@ -1,20 +1,17 @@
-import React, { useState, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Modal,
   TouchableOpacity,
-  ScrollView,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRecording } from '../../hooks/useRecording';
-import { supabase } from '../../services/supabase/client';
 import { uploadMedia } from '../../services/supabase/media';
-import { Species } from '../../types/observation';
 import { colors } from '../../constants/colors';
-import { spacing, borderRadius } from '../../constants/spacing';
+import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { formatDuration } from '../../utils/formatters';
 
@@ -42,21 +39,14 @@ const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
 }, ref) => {
   const {
     isRecording,
-    isPreviewing,
-    isPlaying,
     duration,
-    recordingUri,
     start,
     stop,
     cancel,
-    preview,
     discard,
   } = useRecording();
 
-  const [species, setSpecies] = useState<Species[]>([]);
-  const [selectedSpecies, setSelectedSpecies] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [loadingSpecies, setLoadingSpecies] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [hasAutoStarted, setHasAutoStarted] = useState(false);
 
   // Notify parent of recording state changes
@@ -66,14 +56,46 @@ const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
 
   // Auto-start recording when modal becomes visible
   useEffect(() => {
-    if (visible && autoStart && !hasAutoStarted && !isRecording && !isPreviewing) {
+    if (visible && autoStart && !hasAutoStarted && !isRecording) {
       setHasAutoStarted(true);
       start();
     }
     if (!visible) {
       setHasAutoStarted(false);
     }
-  }, [visible, autoStart, hasAutoStarted, isRecording, isPreviewing, start]);
+  }, [visible, autoStart, hasAutoStarted, isRecording, start]);
+
+  // Stop and save recording, then close
+  const stopSaveAndClose = async () => {
+    if (!isRecording) {
+      onClose();
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const result = await stop();
+
+      if (result?.uri) {
+        // Upload immediately
+        const response = await fetch(result.uri);
+        const blob = await response.blob();
+        await uploadMedia(blob, 'audio', {
+          userId,
+          duration: result.duration,
+        });
+      }
+
+      discard();
+      onRecordingComplete();
+    } catch (error) {
+      console.error('Failed to save recording:', error);
+      discard();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Expose imperative methods
   useImperativeHandle(ref, () => ({
@@ -82,116 +104,15 @@ const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
         start();
       }
     },
-    stopAndClose: async () => {
-      if (isRecording) {
-        await stop();
-        // Save will happen via the useEffect that watches recordingUri
-        // For now, just close - the recording is saved
-        setTimeout(async () => {
-          if (recordingUri) {
-            try {
-              const response = await fetch(recordingUri);
-              const blob = await response.blob();
-              await uploadMedia(blob, 'audio', { userId, duration });
-            } catch (e) {
-              console.error('Failed to save recording:', e);
-            }
-          }
-          discard();
-          onClose();
-        }, 100);
-      } else {
-        discard();
-        onClose();
-      }
-    },
-  }), [isRecording, start, stop, discard, onClose, recordingUri, userId, duration]);
+    stopAndClose: stopSaveAndClose,
+  }), [isRecording, start, stopSaveAndClose]);
 
-  useEffect(() => {
-    if (visible) {
-      fetchSpecies();
-    }
-  }, [visible]);
-
-  const fetchSpecies = async () => {
-    setLoadingSpecies(true);
-    const { data, error } = await supabase
-      .from('species')
-      .select('*')
-      .order('name');
-
-    if (!error && data) {
-      setSpecies(data);
-    }
-    setLoadingSpecies(false);
-  };
-
-  const handleRecordPress = async () => {
+  const handleClose = async () => {
     if (isRecording) {
-      // Stop recording and save immediately
-      await stop();
-      await saveAndClose();
-    } else {
-      await start();
+      await cancel();
     }
-  };
-
-  const saveAndClose = async () => {
-    if (!recordingUri) return;
-
-    setUploading(true);
-    try {
-      const response = await fetch(recordingUri);
-      const blob = await response.blob();
-
-      await uploadMedia(blob, 'audio', {
-        userId,
-        duration,
-      });
-
-      discard();
-      onRecordingComplete();
-    } catch (error) {
-      console.error('Failed to upload recording:', error);
-      // Still close on error
-      discard();
-      onClose();
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!recordingUri) return;
-
-    setUploading(true);
-    try {
-      const response = await fetch(recordingUri);
-      const blob = await response.blob();
-
-      await uploadMedia(blob, 'audio', {
-        userId,
-        speciesId: selectedSpecies || undefined,
-        duration,
-      });
-
-      onRecordingComplete();
-      handleClose();
-    } catch (error) {
-      console.error('Failed to upload recording:', error);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleClose = () => {
     discard();
-    setSelectedSpecies(null);
     onClose();
-  };
-
-  const handleCancel = async () => {
-    await cancel();
   };
 
   return (
@@ -206,100 +127,32 @@ const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
           <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
             <Text style={styles.closeText}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Voice Recording</Text>
+          <Text style={styles.title}>Recording</Text>
           <View style={styles.closeButton} />
         </View>
 
-        {!isPreviewing ? (
-          <View style={styles.recordingSection}>
-            <View style={styles.timerContainer}>
-              <Text style={styles.timer}>{formatDuration(duration)}</Text>
-              {isRecording && <Text style={styles.recordingLabel}>Recording...</Text>}
-            </View>
+        <View style={styles.recordingSection}>
+          <View style={styles.timerContainer}>
+            <Text style={styles.timer}>{formatDuration(duration)}</Text>
+            {isRecording && <Text style={styles.recordingLabel}>Recording...</Text>}
+            {saving && <Text style={styles.savingLabel}>Saving...</Text>}
+          </View>
 
+          {saving ? (
+            <View style={styles.savingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : (
             <TouchableOpacity
               style={[styles.recordButton, isRecording && styles.recordButtonActive]}
-              onPress={handleRecordPress}
+              onPress={stopSaveAndClose}
               activeOpacity={0.8}
+              disabled={saving}
             >
               <View style={[styles.recordInner, isRecording && styles.recordInnerActive]} />
             </TouchableOpacity>
-
-            {isRecording && (
-              <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        ) : (
-          <View style={styles.previewSection}>
-            <View style={styles.previewCard}>
-              <Text style={styles.previewDuration}>{formatDuration(duration)}</Text>
-              <TouchableOpacity
-                style={styles.playButton}
-                onPress={preview}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.playButtonText}>{isPlaying ? 'Pause' : 'Play'}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.speciesLabel}>Select Species (Optional)</Text>
-            {loadingSpecies ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.speciesList}
-              >
-                {species.map((s) => (
-                  <TouchableOpacity
-                    key={s.id}
-                    style={[
-                      styles.speciesChip,
-                      selectedSpecies === s.id && styles.speciesChipSelected,
-                    ]}
-                    onPress={() =>
-                      setSelectedSpecies(selectedSpecies === s.id ? null : s.id)
-                    }
-                  >
-                    <Text
-                      style={[
-                        styles.speciesText,
-                        selectedSpecies === s.id && styles.speciesTextSelected,
-                      ]}
-                    >
-                      {s.nameAchuar || s.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-
-            <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={styles.discardButton}
-                onPress={discard}
-                disabled={uploading}
-              >
-                <Text style={styles.discardText}>Discard</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.saveButton, uploading && styles.saveButtonDisabled]}
-                onPress={handleSave}
-                disabled={uploading}
-              >
-                {uploading ? (
-                  <ActivityIndicator color={colors.textLight} />
-                ) : (
-                  <Text style={styles.saveText}>Save</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+          )}
+        </View>
       </SafeAreaView>
     </Modal>
   );
@@ -351,6 +204,17 @@ const styles = StyleSheet.create({
     color: colors.recording,
     marginTop: spacing.sm,
   },
+  savingLabel: {
+    ...typography.body,
+    color: colors.primary,
+    marginTop: spacing.sm,
+  },
+  savingContainer: {
+    width: 80,
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   recordButton: {
     width: 80,
     height: 80,
@@ -374,102 +238,6 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 4,
-  },
-  cancelButton: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xl,
-  },
-  cancelText: {
-    ...typography.button,
-    color: colors.textSecondary,
-  },
-  previewSection: {
-    flex: 1,
-    padding: spacing.xl,
-  },
-  previewCard: {
-    backgroundColor: colors.primary,
-    borderRadius: borderRadius.lg,
-    padding: spacing.xl,
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  previewDuration: {
-    fontSize: 48,
-    fontWeight: '300',
-    color: colors.textLight,
-    marginBottom: spacing.md,
-  },
-  playButton: {
-    backgroundColor: colors.accent,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xxl,
-    borderRadius: borderRadius.full,
-  },
-  playButtonText: {
-    ...typography.button,
-    color: colors.text,
-  },
-  speciesLabel: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
-  },
-  speciesList: {
-    paddingBottom: spacing.md,
-    gap: spacing.sm,
-  },
-  speciesChip: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: spacing.sm,
-  },
-  speciesChipSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  speciesText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  speciesTextSelected: {
-    color: colors.textLight,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginTop: 'auto',
-    paddingTop: spacing.xl,
-  },
-  discardButton: {
-    flex: 1,
-    paddingVertical: spacing.lg,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-  },
-  discardText: {
-    ...typography.button,
-    color: colors.textSecondary,
-  },
-  saveButton: {
-    flex: 1,
-    paddingVertical: spacing.lg,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-  },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveText: {
-    ...typography.button,
-    color: colors.textLight,
   },
 });
 
