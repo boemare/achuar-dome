@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,15 +22,24 @@ interface RecordingModalProps {
   visible: boolean;
   onClose: () => void;
   onRecordingComplete: () => void;
+  onRecordingStateChange?: (isRecording: boolean) => void;
   userId?: string;
+  autoStart?: boolean;
 }
 
-export default function RecordingModal({
+export interface RecordingModalRef {
+  startRecording: () => void;
+  stopAndClose: () => void;
+}
+
+const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
   visible,
   onClose,
   onRecordingComplete,
+  onRecordingStateChange,
   userId,
-}: RecordingModalProps) {
+  autoStart = false,
+}, ref) => {
   const {
     isRecording,
     isPreviewing,
@@ -48,6 +57,40 @@ export default function RecordingModal({
   const [selectedSpecies, setSelectedSpecies] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [loadingSpecies, setLoadingSpecies] = useState(true);
+  const [hasAutoStarted, setHasAutoStarted] = useState(false);
+
+  // Notify parent of recording state changes
+  useEffect(() => {
+    onRecordingStateChange?.(isRecording);
+  }, [isRecording, onRecordingStateChange]);
+
+  // Auto-start recording when modal becomes visible
+  useEffect(() => {
+    if (visible && autoStart && !hasAutoStarted && !isRecording && !isPreviewing) {
+      setHasAutoStarted(true);
+      start();
+    }
+    if (!visible) {
+      setHasAutoStarted(false);
+    }
+  }, [visible, autoStart, hasAutoStarted, isRecording, isPreviewing, start]);
+
+  // Expose imperative methods
+  useImperativeHandle(ref, () => ({
+    startRecording: () => {
+      if (!isRecording) {
+        start();
+      }
+    },
+    stopAndClose: async () => {
+      if (isRecording) {
+        await cancel();
+      } else {
+        discard();
+      }
+      onClose();
+    },
+  }), [isRecording, start, cancel, discard, onClose]);
 
   useEffect(() => {
     if (visible) {
@@ -218,7 +261,7 @@ export default function RecordingModal({
       </SafeAreaView>
     </Modal>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -387,3 +430,5 @@ const styles = StyleSheet.create({
     color: colors.textLight,
   },
 });
+
+export default RecordingModal;

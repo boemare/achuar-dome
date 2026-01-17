@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { useObservations } from '../../hooks/useObservations';
@@ -19,7 +21,10 @@ import { spacing, borderRadius } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { formatDateTime } from '../../utils/formatters';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Edge swipe zone width (Snapchat-style)
+const EDGE_SWIPE_WIDTH = 25;
 
 // Default to Achuar territory in Ecuador
 const INITIAL_REGION: Region = {
@@ -42,6 +47,17 @@ export default function MapScreen() {
     useObservations(undefined, isElder);
   const mapRef = useRef<MapView>(null);
   const [mapReady, setMapReady] = useState(false);
+  const navigation = useNavigation<any>();
+
+  // Edge swipe gesture to navigate to Chat (right swipe from right edge)
+  const rightEdgeSwipe = Gesture.Pan()
+    .activeOffsetX([-20, 20])
+    .onEnd((event) => {
+      // Swipe left from right edge -> go to Chat
+      if (event.translationX < -50) {
+        navigation.navigate('Chat');
+      }
+    });
 
   const handleMarkerPress = useCallback(
     (observation: ObservationWithMedia) => {
@@ -194,6 +210,11 @@ export default function MapScreen() {
       <TouchableOpacity style={styles.refreshButton} onPress={refresh} activeOpacity={0.8}>
         <Text style={styles.refreshText}>Refresh</Text>
       </TouchableOpacity>
+
+      {/* Right edge swipe zone for Snapchat-style navigation */}
+      <GestureDetector gesture={rightEdgeSwipe}>
+        <View style={styles.rightEdgeZone} />
+      </GestureDetector>
     </View>
   );
 }
@@ -364,5 +385,13 @@ const styles = StyleSheet.create({
   refreshText: {
     ...typography.button,
     color: colors.textLight,
+  },
+  rightEdgeZone: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: EDGE_SWIPE_WIDTH,
+    height: SCREEN_HEIGHT,
+    backgroundColor: 'transparent',
   },
 });

@@ -1,5 +1,5 @@
 import 'react-native-gesture-handler';
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -8,21 +8,34 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import VoiceButton from './src/components/voice/VoiceButton';
-import RecordingModal from './src/components/voice/RecordingModal';
+import RecordingModal, { RecordingModalRef } from './src/components/voice/RecordingModal';
 import { colors } from './src/constants/colors';
 
 function AppContent() {
   const { isAuthenticated, user } = useAuth();
   const [recordingModalVisible, setRecordingModalVisible] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const recordingModalRef = useRef<RecordingModalRef>(null);
 
-  const handleVoicePress = () => {
-    setRecordingModalVisible(true);
-  };
+  const handleVoicePress = useCallback(() => {
+    if (isRecording) {
+      // Already recording - stop and close
+      recordingModalRef.current?.stopAndClose();
+    } else {
+      // Not recording - open modal and start recording
+      setRecordingModalVisible(true);
+      // Recording will start automatically when modal opens
+    }
+  }, [isRecording]);
 
-  const handleRecordingComplete = () => {
+  const handleRecordingStateChange = useCallback((recording: boolean) => {
+    setIsRecording(recording);
+  }, []);
+
+  const handleModalClose = useCallback(() => {
     setRecordingModalVisible(false);
-  };
+    setIsRecording(false);
+  }, []);
 
   return (
     <View style={{ flex: 1 }}>
@@ -33,10 +46,13 @@ function AppContent() {
         <>
           <VoiceButton onPress={handleVoicePress} isRecording={isRecording} />
           <RecordingModal
+            ref={recordingModalRef}
             visible={recordingModalVisible}
-            onClose={() => setRecordingModalVisible(false)}
-            onRecordingComplete={handleRecordingComplete}
+            onClose={handleModalClose}
+            onRecordingComplete={handleModalClose}
+            onRecordingStateChange={handleRecordingStateChange}
             userId={user?.id}
+            autoStart={true}
           />
         </>
       )}
