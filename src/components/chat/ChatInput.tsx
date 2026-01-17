@@ -1,0 +1,145 @@
+import React, { useState } from 'react';
+import {
+  View,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import Svg, { Path } from 'react-native-svg';
+import { colors } from '../../constants/colors';
+import { spacing, borderRadius } from '../../constants/spacing';
+import { typography } from '../../constants/typography';
+
+interface ChatInputProps {
+  onSend: (message: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+}
+
+// Send arrow icon
+const SendIcon = ({ color = colors.textLight, size = 20 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M22 2L11 13"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M22 2L15 22L11 13L2 9L22 2Z"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+export default function ChatInput({
+  onSend,
+  disabled = false,
+  placeholder = 'Ask about wildlife...',
+}: ChatInputProps) {
+  const [text, setText] = useState('');
+
+  const handleSend = () => {
+    if (text.trim() && !disabled) {
+      onSend(text.trim());
+      setText('');
+    }
+  };
+
+  const canSend = text.trim() && !disabled;
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={100}
+    >
+      <View style={styles.container}>
+        <View style={styles.inputWrapper}>
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              value={text}
+              onChangeText={setText}
+              placeholder={placeholder}
+              placeholderTextColor={colors.textMuted}
+              multiline
+              maxLength={1000}
+              editable={!disabled}
+              returnKeyType="default"
+            />
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                canSend && styles.sendButtonActive,
+              ]}
+              onPress={handleSend}
+              disabled={!canSend}
+              activeOpacity={0.7}
+            >
+              <SendIcon
+                color={canSend ? colors.textLight : colors.textMuted}
+                size={18}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.background,
+  },
+  inputWrapper: {
+    shadowColor: colors.primaryDark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    minHeight: 48,
+    maxHeight: 140,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  input: {
+    ...typography.body,
+    flex: 1,
+    color: colors.text,
+    paddingVertical: spacing.sm,
+    paddingRight: spacing.sm,
+    maxHeight: 120,
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  sendButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  sendButtonActive: {
+    backgroundColor: colors.primary,
+  },
+});

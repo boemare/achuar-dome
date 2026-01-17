@@ -138,7 +138,7 @@ achuar-dome/
 | Audio recording | [Expo AV Recording](https://docs.expo.dev/versions/latest/sdk/av/#recording-sounds) |
 | Speech-to-text | [Expo Speech](https://docs.expo.dev/versions/latest/sdk/speech/) |
 | Supabase storage | [Storage Quickstart](https://supabase.com/docs/guides/storage/quickstart) |
-| Maps | [React Native Maps](https://github.com/react-native-maps/react-native-maps) |
+| Maps | [Mapbox React Native](https://github.com/rnmapbox/maps) |
 | Gemini API | [Gemini Quickstart](https://ai.google.dev/gemini-api/docs/quickstart) |
 
 ---
@@ -210,7 +210,7 @@ npx expo install @supabase/supabase-js
 npx expo install expo-av expo-speech expo-notifications
 npx expo install react-native-gesture-handler react-native-reanimated
 npx expo install @react-navigation/native @react-navigation/bottom-tabs
-npx expo install react-native-maps
+npx expo install @rnmapbox/maps
 
 # 4. Create folder structure
 mkdir -p docs/tutorials src/components src/screens src/services supabase/migrations
@@ -246,10 +246,11 @@ Android-first wildlife monitoring application for the Achuar community in Ecuado
 
 | Principle | Implementation |
 |-----------|----------------|
-| **3 Tabs Only** | Map, Gallery, Chat - swipe or tap to navigate (Snapchat-style) |
-| **Gallery = Home** | Photos + Videos + Audio recordings all in one place |
+| **3 Tabs Only** | Map, Chat, Gallery - swipe or tap to navigate (Snapchat-style) |
+| **Chat = Home** | AI assistant for questions, voice-first interaction |
 | **Big Voice Button** | Always visible, one tap to record knowledge |
 | **Voice-First** | No typing required - speak to ask questions or add knowledge |
+| **Voice Commands** | Future: voice commands to control app hands-free, helping Achuar with fieldwork |
 | **Child-Simple UI** | Designed for non-technical users. Large buttons, icons over text |
 | **RAG-Enriched AI** | Community voice recordings automatically enrich AI responses |
 | **2 Roles** | Elder (see sensitive events) vs General (educational only) |
@@ -612,6 +613,7 @@ Nombre Achuar: [from community recordings]
 | Layer | Technology | Rationale |
 |-------|-----------|-----------|
 | **Mobile App** | React Native + Expo | Cross-platform, large ecosystem, good offline support |
+| **Maps** | Mapbox | Satellite imagery, offline maps, customizable styling |
 | **Backend/Database** | Supabase | PostgreSQL, auth, storage, real-time, edge functions |
 | **Cloud Processing** | Supabase Edge Functions or external server | Run MegaDetector, transcription |
 | **Object Detection** | MegaDetector V6 | Free, open source, 95%+ accuracy on camera trap images |
@@ -841,7 +843,7 @@ voice_recordings (
         ← SWIPE LEFT                    SWIPE RIGHT →
     ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
     │              │  │              │  │              │
-    │   🗺️ MAPA   │  │ 📷 GALERÍA  │  │  💬 CHAT    │
+    │   🗺️ MAPA   │  │  💬 CHAT    │  │ 📷 GALERÍA  │
     │              │  │   (HOME)     │  │              │
     │              │  │              │  │              │
     └──────────────┘  └──────────────┘  └──────────────┘
@@ -854,7 +856,8 @@ voice_recordings (
 **Navigation (exactly like Snapchat):**
 - **Swipe left/right** to move between screens
 - **Tap bottom icons** to jump directly
-- **Gallery is home** (center screen - photos, videos, audio)
+- **Chat is home** (center screen - ask questions, talk to AI)
+- **Swipe right for Gallery** (photos, videos, audio)
 - **Smooth transitions** with gesture animations
 
 ```
@@ -868,7 +871,7 @@ voice_recordings (
 │                    🎤 GRABAR                            │
 │              (Big floating voice button)                │
 ├───────────────┬───────────────┬─────────────────────────┤
-│   🗺️ Mapa    │  📷 Galería  │      💬 Chat            │
+│   🗺️ Mapa    │   💬 Chat    │      📷 Galería         │
 │               │    (●)        │                         │
 └───────────────┴───────────────┴─────────────────────────┘
         ← swipe                              swipe →
@@ -894,7 +897,7 @@ voice_recordings (
 | Illegal logging events | ✅ | ❌ |
 
 **Features:**
-- Satellite map view (Google Maps / Mapbox)
+- Satellite map view (Mapbox API)
 - Tap pin → see photo/video from that location
 - Filter by: animal type, date, camera
 - Leaders: Red pins for sensitive events, tap for footage
@@ -1176,6 +1179,30 @@ Given remote Amazon location:
 - [ ] Analytics dashboard
 - [ ] Export/reporting features
 - [ ] Full offline support
+- [ ] Voice commands for hands-free app control (see section 6.9)
+
+#### 6.9 Voice Commands (Future - Mobile Use)
+
+**Vision**: Enable Achuar community members to use the app hands-free while working in the field through voice commands.
+
+**Use Cases:**
+- "Mostrar mapa" - Navigate to map screen
+- "Grabar nota" - Start voice recording
+- "Buscar jaguar" - Search for jaguar sightings
+- "¿Qué animal es este?" - Identify animal (with camera)
+- "Alertas recientes" - Hear recent notifications
+
+**Why Voice Commands:**
+- Hands may be occupied during fieldwork
+- Easier for users with limited literacy
+- Natural extension of voice-first design
+- Reduces need to look at screen in forest environment
+
+**Technical Approach:**
+- Use device speech recognition (Android native)
+- Simple command vocabulary in Spanish
+- Audio feedback for confirmations
+- Works offline for basic navigation commands
 
 ---
 

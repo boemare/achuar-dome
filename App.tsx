@@ -1,20 +1,59 @@
+import 'react-native-gesture-handler';
+import React, { useState } from 'react';
+import { View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { NavigationContainer } from '@react-navigation/native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+import RootNavigator from './src/navigation/RootNavigator';
+import VoiceButton from './src/components/voice/VoiceButton';
+import RecordingModal from './src/components/voice/RecordingModal';
+import { colors } from './src/constants/colors';
 
-export default function App() {
+function AppContent() {
+  const { isAuthenticated, user } = useAuth();
+  const [recordingModalVisible, setRecordingModalVisible] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+
+  const handleVoicePress = () => {
+    setRecordingModalVisible(true);
+  };
+
+  const handleRecordingComplete = () => {
+    setRecordingModalVisible(false);
+  };
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
+    <View style={{ flex: 1 }}>
+      <StatusBar style="dark" backgroundColor={colors.background} />
+      <RootNavigator />
+
+      {isAuthenticated && (
+        <>
+          <VoiceButton onPress={handleVoicePress} isRecording={isRecording} />
+          <RecordingModal
+            visible={recordingModalVisible}
+            onClose={() => setRecordingModalVisible(false)}
+            onRecordingComplete={handleRecordingComplete}
+            userId={user?.id}
+          />
+        </>
+      )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+export default function App() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <NavigationContainer>
+            <AppContent />
+          </NavigationContainer>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
