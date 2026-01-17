@@ -84,13 +84,28 @@ const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
     },
     stopAndClose: async () => {
       if (isRecording) {
-        await cancel();
+        await stop();
+        // Save will happen via the useEffect that watches recordingUri
+        // For now, just close - the recording is saved
+        setTimeout(async () => {
+          if (recordingUri) {
+            try {
+              const response = await fetch(recordingUri);
+              const blob = await response.blob();
+              await uploadMedia(blob, 'audio', { userId, duration });
+            } catch (e) {
+              console.error('Failed to save recording:', e);
+            }
+          }
+          discard();
+          onClose();
+        }, 100);
       } else {
         discard();
+        onClose();
       }
-      onClose();
     },
-  }), [isRecording, start, cancel, discard, onClose]);
+  }), [isRecording, start, stop, discard, onClose, recordingUri, userId, duration]);
 
   useEffect(() => {
     if (visible) {
@@ -113,9 +128,36 @@ const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
 
   const handleRecordPress = async () => {
     if (isRecording) {
+      // Stop recording and save immediately
       await stop();
+      await saveAndClose();
     } else {
       await start();
+    }
+  };
+
+  const saveAndClose = async () => {
+    if (!recordingUri) return;
+
+    setUploading(true);
+    try {
+      const response = await fetch(recordingUri);
+      const blob = await response.blob();
+
+      await uploadMedia(blob, 'audio', {
+        userId,
+        duration,
+      });
+
+      discard();
+      onRecordingComplete();
+    } catch (error) {
+      console.error('Failed to upload recording:', error);
+      // Still close on error
+      discard();
+      onClose();
+    } finally {
+      setUploading(false);
     }
   };
 
