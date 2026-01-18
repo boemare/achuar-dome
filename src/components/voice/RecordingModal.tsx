@@ -13,9 +13,11 @@ import { uploadMedia } from '../../services/supabase/media';
 import { colors } from '../../constants/colors';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const WAVEFORM_BARS = 60;
+// Calculate bars to fill screen width with padding
 const BAR_WIDTH = 2;
 const BAR_GAP = 2;
+const WAVEFORM_PADDING = 16;
+const WAVEFORM_BARS = Math.floor((SCREEN_WIDTH - WAVEFORM_PADDING * 2) / (BAR_WIDTH + BAR_GAP));
 const MAX_BAR_HEIGHT = 80;
 
 interface RecordingModalProps {
@@ -233,15 +235,20 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
   sheet: {
-    backgroundColor: '#1C1C1E',
+    backgroundColor: colors.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 8,
     alignItems: 'center',
     minHeight: SCREEN_HEIGHT * 0.42,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
   },
   handleContainer: {
     alignItems: 'center',
@@ -251,18 +258,18 @@ const styles = StyleSheet.create({
     width: 36,
     height: 5,
     borderRadius: 3,
-    backgroundColor: '#5C5C5E',
+    backgroundColor: colors.border,
   },
   title: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: colors.text,
     marginTop: 16,
   },
   timer: {
     fontSize: 16,
     fontWeight: '400',
-    color: '#8E8E93',
+    color: colors.textMuted,
     marginTop: 4,
     fontVariant: ['tabular-nums'],
   },
@@ -271,7 +278,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: MAX_BAR_HEIGHT,
-    width: SCREEN_WIDTH - 40,
+    width: SCREEN_WIDTH,
+    paddingHorizontal: 16,
     marginTop: 24,
     marginBottom: 24,
   },
@@ -285,7 +293,9 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#3A3A3C',
+    backgroundColor: colors.surface,
+    borderWidth: 3,
+    borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
