@@ -40,7 +40,7 @@ const SendIcon = ({ color = colors.textLight, size = 20 }) => (
 );
 
 // Microphone icon
-const MicIcon = ({ color = colors.textLight, size = 22 }) => (
+const MicIcon = ({ color = colors.textLight, size = 28 }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
       d="M12 1C10.34 1 9 2.34 9 4V12C9 13.66 10.34 15 12 15C13.66 15 15 13.66 15 12V4C15 2.34 13.66 1 12 1Z"
@@ -164,13 +164,13 @@ const styles = StyleSheet.create({
     paddingLeft: spacing.xs,
   },
   micButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.xs,
-    marginBottom: 6,
+    marginRight: spacing.sm,
+    marginBottom: 2,
   },
   sendButton: {
     width: 44,
