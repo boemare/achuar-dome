@@ -1,30 +1,28 @@
 import React, { useState, useRef } from 'react';
-import {
-  View,
-  StyleSheet,
-  PanResponder,
-  Dimensions,
-  GestureResponderEvent,
-} from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  runOnJS,
+} from 'react-native-reanimated';
 import { colors } from '../../constants/colors';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GRID_SIZE = 3;
-const DOT_SIZE = 28;
-const GRID_PADDING = 60;
-// Very large touch padding - covers most of the screen so finger can go anywhere
-const TOUCH_PADDING = 100;
-const GRID_WIDTH = SCREEN_WIDTH - GRID_PADDING * 2;
+const DOT_SIZE = 32;
+const GRID_PADDING = 50;
+const GRID_WIDTH = Math.min(SCREEN_WIDTH - GRID_PADDING * 2, 300);
 const CELL_SIZE = GRID_WIDTH / GRID_SIZE;
-// Make touch area fill most of available space
-const TOUCH_AREA_WIDTH = SCREEN_WIDTH;
-const TOUCH_AREA_HEIGHT = SCREEN_HEIGHT * 0.6;
+// Detection radius - very generous for thick fingers
+const DETECTION_RADIUS = CELL_SIZE * 0.9;
 
 interface Point {
   row: number;
   col: number;
   x: number;
   y: number;
+  index: number;
 }
 
 interface PatternLockProps {
@@ -33,190 +31,233 @@ interface PatternLockProps {
 }
 
 export default function PatternLock({ onPatternComplete, disabled = false }: PatternLockProps) {
-  const [selectedPoints, setSelectedPoints] = useState<Point[]>([]);
-  const [currentPoint, setCurrentPoint] = useState<{ x: number; y: number } | null>(null);
-  const containerRef = useRef<View>(null);
-  const layoutRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
+  const selectedIndicesRef = useRef<number[]>([]); // Ref to track current selection
+  const currentX = useSharedValue(0);
+  const currentY = useSharedValue(0);
+  const isDrawing = useSharedValue(false);
+  const containerLayout = useRef({ x: 0, y: 0 });
 
-  // Calculate offsets to center the grid in the large touch area
-  const gridOffsetX = (TOUCH_AREA_WIDTH - GRID_WIDTH) / 2;
-  const gridOffsetY = (TOUCH_AREA_HEIGHT - GRID_WIDTH) / 2;
-
-  // Points are centered in the touch area
+  // Generate grid points
   const points: Point[] = [];
   for (let row = 0; row < GRID_SIZE; row++) {
     for (let col = 0; col < GRID_SIZE; col++) {
+      const index = row * GRID_SIZE + col;
       points.push({
         row,
         col,
-        x: gridOffsetX + col * CELL_SIZE + CELL_SIZE / 2,
-        y: gridOffsetY + row * CELL_SIZE + CELL_SIZE / 2,
+        x: col * CELL_SIZE + CELL_SIZE / 2,
+        y: row * CELL_SIZE + CELL_SIZE / 2,
+        index,
       });
     }
   }
 
-  const getPointIndex = (row: number, col: number): number => {
-    return row * GRID_SIZE + col;
-  };
-
-  const findNearestPoint = (x: number, y: number): Point | null => {
-    // Very large threshold for thick fingers - 85% of cell size
-    const threshold = CELL_SIZE * 0.85;
-    let nearestPoint: Point | null = null;
-    let nearestDistance = Infinity;
+  const findPointAtPosition = (x: number, y: number): Point | null => {
+    let closest: Point | null = null;
+    let closestDist = Infinity;
 
     for (const point of points) {
-      const distance = Math.sqrt(Math.pow(x - point.x, 2) + Math.pow(y - point.y, 2));
-      if (distance < threshold && distance < nearestDistance) {
-        nearestDistance = distance;
-        nearestPoint = point;
+      const dx = x - point.x;
+      const dy = y - point.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < DETECTION_RADIUS && dist < closestDist) {
+        closest = point;
+        closestDist = dist;
       }
     }
-    return nearestPoint;
+    return closest;
   };
 
-  const isPointSelected = (point: Point): boolean => {
-    return selectedPoints.some((p) => p.row === point.row && p.col === point.col);
-  };
-
-  const handleTouchStart = (event: GestureResponderEvent) => {
-    if (disabled) return;
-
-    const { locationX, locationY } = event.nativeEvent;
-    const point = findNearestPoint(locationX, locationY);
-
-    if (point && !isPointSelected(point)) {
-      setSelectedPoints([point]);
-      setCurrentPoint({ x: locationX, y: locationY });
+  const addPointToPattern = (pointIndex: number) => {
+    if (!selectedIndicesRef.current.includes(pointIndex)) {
+      const newIndices = [...selectedIndicesRef.current, pointIndex];
+      selectedIndicesRef.current = newIndices;
+      setSelectedIndices(newIndices);
     }
   };
 
-  const handleTouchMove = (event: GestureResponderEvent) => {
-    if (disabled || selectedPoints.length === 0) return;
+  const resetPattern = () => {
+    selectedIndicesRef.current = [];
+    setSelectedIndices([]);
+  };
 
-    const { locationX, locationY } = event.nativeEvent;
-    setCurrentPoint({ x: locationX, y: locationY });
+  const completePattern = () => {
+    const indices = selectedIndicesRef.current;
+    if (indices.length >= 4) {
+      onPatternComplete(indices);
+    }
+    // Reset after a short delay to show the final pattern
+    setTimeout(() => {
+      selectedIndicesRef.current = [];
+      setSelectedIndices([]);
+    }, 300);
+  };
 
-    const point = findNearestPoint(locationX, locationY);
-    if (point && !isPointSelected(point)) {
-      setSelectedPoints((prev) => [...prev, point]);
+  const startNewPattern = () => {
+    selectedIndicesRef.current = [];
+    setSelectedIndices([]);
+  };
+
+  // Handle touch at position - checks for points and adds them
+  const handleTouchAtPosition = (x: number, y: number) => {
+    const point = findPointAtPosition(x, y);
+    if (point) {
+      addPointToPattern(point.index);
     }
   };
 
-  const handleTouchEnd = () => {
-    if (disabled) return;
-
-    if (selectedPoints.length >= 4) {
-      const pattern = selectedPoints.map((p) => getPointIndex(p.row, p.col));
-      onPatternComplete(pattern);
-    }
-
-    setSelectedPoints([]);
-    setCurrentPoint(null);
+  // Handle gesture start
+  const handleGestureStart = (x: number, y: number) => {
+    startNewPattern();
+    handleTouchAtPosition(x, y);
   };
 
-  const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: handleTouchStart,
-    onPanResponderMove: handleTouchMove,
-    onPanResponderRelease: handleTouchEnd,
-    onPanResponderTerminate: handleTouchEnd,
-    // Prevent other views from stealing the gesture
-    onPanResponderTerminationRequest: () => false,
-    onShouldBlockNativeResponder: () => true,
+  // Use react-native-gesture-handler for better tracking
+  const panGesture = Gesture.Pan()
+    .enabled(!disabled)
+    .shouldCancelWhenOutside(false) // KEY: Continue tracking outside bounds
+    .minDistance(0)
+    .onStart((event) => {
+      'worklet';
+      isDrawing.value = true;
+      currentX.value = event.x;
+      currentY.value = event.y;
+      runOnJS(handleGestureStart)(event.x, event.y);
+    })
+    .onUpdate((event) => {
+      'worklet';
+      currentX.value = event.x;
+      currentY.value = event.y;
+      runOnJS(handleTouchAtPosition)(event.x, event.y);
+    })
+    .onEnd(() => {
+      'worklet';
+      isDrawing.value = false;
+      runOnJS(completePattern)();
+    })
+    .onFinalize(() => {
+      'worklet';
+      isDrawing.value = false;
+    });
+
+  // Animated style for the current tracking line
+  const trackingLineStyle = useAnimatedStyle(() => {
+    if (!isDrawing.value || selectedIndices.length === 0) {
+      return { opacity: 0 };
+    }
+    return { opacity: 0.5 };
   });
 
+  // Get the last selected point for drawing the tracking line
+  const getLastSelectedPoint = (): Point | null => {
+    if (selectedIndices.length === 0) return null;
+    const lastIndex = selectedIndices[selectedIndices.length - 1];
+    return points.find(p => p.index === lastIndex) || null;
+  };
+
+  // Render connection lines between selected points
   const renderLines = () => {
-    if (selectedPoints.length < 2) return null;
-
     const lines = [];
-    for (let i = 1; i < selectedPoints.length; i++) {
-      const prev = selectedPoints[i - 1];
-      const curr = selectedPoints[i];
-      lines.push(
-        <View
-          key={`line-${i}`}
-          style={[
-            styles.line,
-            {
-              left: Math.min(prev.x, curr.x),
-              top: Math.min(prev.y, curr.y) - 2,
-              width: Math.sqrt(
-                Math.pow(curr.x - prev.x, 2) + Math.pow(curr.y - prev.y, 2)
-              ),
-              transform: [
-                { translateX: prev.x < curr.x ? 0 : -Math.abs(curr.x - prev.x) },
-                {
-                  rotate: `${Math.atan2(curr.y - prev.y, curr.x - prev.x)}rad`,
-                },
-              ],
-            },
-          ]}
-        />
-      );
-    }
+    for (let i = 1; i < selectedIndices.length; i++) {
+      const prevPoint = points.find(p => p.index === selectedIndices[i - 1]);
+      const currPoint = points.find(p => p.index === selectedIndices[i]);
+      if (prevPoint && currPoint) {
+        const dx = currPoint.x - prevPoint.x;
+        const dy = currPoint.y - prevPoint.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx);
 
-    // Line to current touch point
-    if (currentPoint && selectedPoints.length > 0) {
-      const last = selectedPoints[selectedPoints.length - 1];
-      lines.push(
-        <View
-          key="current-line"
-          style={[
-            styles.line,
-            styles.currentLine,
-            {
-              left: last.x,
-              top: last.y - 2,
-              width: Math.sqrt(
-                Math.pow(currentPoint.x - last.x, 2) + Math.pow(currentPoint.y - last.y, 2)
-              ),
-              transform: [
-                {
-                  rotate: `${Math.atan2(currentPoint.y - last.y, currentPoint.x - last.x)}rad`,
-                },
-              ],
-            },
-          ]}
-        />
-      );
+        lines.push(
+          <View
+            key={`line-${i}`}
+            style={[
+              styles.line,
+              {
+                left: prevPoint.x,
+                top: prevPoint.y - 3,
+                width: length,
+                transform: [{ rotate: `${angle}rad` }],
+              },
+            ]}
+          />
+        );
+      }
     }
-
     return lines;
   };
 
   return (
-    <View
-      ref={containerRef}
-      style={styles.container}
-      {...panResponder.panHandlers}
-    >
-      {renderLines()}
-      {points.map((point) => {
-        const isSelected = isPointSelected(point);
-        return (
-          <View
-            key={`${point.row}-${point.col}`}
-            style={[
-              styles.dot,
-              {
-                left: point.x - DOT_SIZE / 2,
-                top: point.y - DOT_SIZE / 2,
-              },
-              isSelected && styles.dotSelected,
-            ]}
-          />
-        );
-      })}
+    <View style={styles.wrapper}>
+      <GestureDetector gesture={panGesture}>
+        <Animated.View
+          style={styles.container}
+          onLayout={(e) => {
+            containerLayout.current = {
+              x: e.nativeEvent.layout.x,
+              y: e.nativeEvent.layout.y,
+            };
+          }}
+        >
+          {/* Connection lines */}
+          {renderLines()}
+
+          {/* Dots */}
+          {points.map((point) => {
+            const isSelected = selectedIndices.includes(point.index);
+            return (
+              <View
+                key={point.index}
+                style={[
+                  styles.dot,
+                  {
+                    left: point.x - DOT_SIZE / 2,
+                    top: point.y - DOT_SIZE / 2,
+                  },
+                  isSelected && styles.dotSelected,
+                ]}
+              >
+                {isSelected && <View style={styles.dotInner} />}
+              </View>
+            );
+          })}
+
+          {/* Touch area indicator (invisible but shows the detection zone) */}
+          {__DEV__ && false && points.map((point) => (
+            <View
+              key={`zone-${point.index}`}
+              style={[
+                styles.debugZone,
+                {
+                  left: point.x - DETECTION_RADIUS,
+                  top: point.y - DETECTION_RADIUS,
+                  width: DETECTION_RADIUS * 2,
+                  height: DETECTION_RADIUS * 2,
+                  borderRadius: DETECTION_RADIUS,
+                },
+              ]}
+            />
+          ))}
+        </Animated.View>
+      </GestureDetector>
+
+      {/* Instructions */}
+      <View style={styles.instructionContainer}>
+        <Animated.View style={[styles.trackingIndicator, trackingLineStyle]} />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   container: {
-    width: TOUCH_AREA_WIDTH,
-    height: TOUCH_AREA_HEIGHT,
+    width: GRID_WIDTH,
+    height: GRID_WIDTH,
     position: 'relative',
   },
   dot: {
@@ -224,14 +265,22 @@ const styles = StyleSheet.create({
     width: DOT_SIZE,
     height: DOT_SIZE,
     borderRadius: DOT_SIZE / 2,
-    backgroundColor: colors.border,
+    backgroundColor: colors.surface,
     borderWidth: 3,
-    borderColor: colors.borderLight,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dotSelected: {
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
+    transform: [{ scale: 1.2 }],
+  },
+  dotInner: {
+    width: DOT_SIZE * 0.4,
+    height: DOT_SIZE * 0.4,
+    borderRadius: DOT_SIZE * 0.2,
     backgroundColor: colors.primary,
-    borderColor: colors.primaryLight,
-    transform: [{ scale: 1.3 }],
   },
   line: {
     position: 'absolute',
@@ -240,7 +289,20 @@ const styles = StyleSheet.create({
     transformOrigin: 'left center',
     borderRadius: 3,
   },
-  currentLine: {
-    opacity: 0.5,
+  debugZone: {
+    position: 'absolute',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 0, 0, 0.3)',
+    backgroundColor: 'rgba(255, 0, 0, 0.1)',
+  },
+  instructionContainer: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  trackingIndicator: {
+    width: 40,
+    height: 4,
+    backgroundColor: colors.primary,
+    borderRadius: 2,
   },
 });
