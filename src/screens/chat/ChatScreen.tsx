@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,13 +7,15 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Dimensions,
+  Modal,
 } from 'react-native';
-import Svg, { Path, Circle } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { useChat } from '../../hooks/useChat';
 import MessageBubble from '../../components/chat/MessageBubble';
 import ChatInput from '../../components/chat/ChatInput';
+import PatternLock from '../../components/auth/PatternLock';
 import { ChatMessage } from '../../services/ai/chat';
 import { colors } from '../../constants/colors';
 import { spacing, borderRadius } from '../../constants/spacing';
@@ -51,11 +53,18 @@ const ForestLogo = ({ size = 80 }) => (
   </View>
 );
 
-// Suggestion card icons
-const BirdIcon = ({ color = colors.primary, size = 20 }) => (
+// Leader/Shield icon for leader mode button
+const LeaderIcon = ({ color = colors.primary, size = 20 }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
-      d="M12 8C14 8 16 6 18 6C20 6 21 8 21 10C21 14 16 18 12 20C8 18 3 14 3 10C3 8 4 6 6 6C8 6 10 8 12 8Z"
+      d="M12 2L3 7V12C3 16.97 6.84 21.66 12 23C17.16 21.66 21 16.97 21 12V7L12 2Z"
+      stroke={color}
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M12 8V12L15 14"
       stroke={color}
       strokeWidth={1.5}
       strokeLinecap="round"
@@ -64,32 +73,15 @@ const BirdIcon = ({ color = colors.primary, size = 20 }) => (
   </Svg>
 );
 
-const PawIcon = ({ color = colors.primary, size = 20 }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Circle cx="12" cy="14" r="4" stroke={color} strokeWidth={1.5} />
-    <Circle cx="7" cy="8" r="2" fill={color} />
-    <Circle cx="17" cy="8" r="2" fill={color} />
-    <Circle cx="5" cy="13" r="1.5" fill={color} />
-    <Circle cx="19" cy="13" r="1.5" fill={color} />
-  </Svg>
-);
-
-const WaterIcon = ({ color = colors.primary, size = 20 }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M12 2C12 2 5 10 5 14C5 18 8 21 12 21C16 21 19 18 19 14C19 10 12 2 12 2Z"
-      stroke={color}
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </Svg>
-);
+// Test pattern for leader mode: L-shape (0, 3, 6, 7, 8)
+const LEADER_PATTERN = [0, 3, 6, 7, 8];
 
 export default function ChatScreen() {
-  const { user } = useAuth();
+  const { user, isElder, login } = useAuth();
   const { messages, loading, sending, send, startNewConversation } = useChat(user?.id);
   const flatListRef = useRef<FlatList>(null);
+  const [showPatternLock, setShowPatternLock] = useState(false);
+  const [patternError, setPatternError] = useState(false);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -99,27 +91,21 @@ export default function ChatScreen() {
     }
   }, [messages.length]);
 
+  const handlePatternComplete = async (pattern: number[]) => {
+    // Check if the pattern matches
+    if (JSON.stringify(pattern) === JSON.stringify(LEADER_PATTERN)) {
+      setShowPatternLock(false);
+      setPatternError(false);
+      // Login as elder/leader
+      await login('elder');
+    } else {
+      setPatternError(true);
+      setTimeout(() => setPatternError(false), 1000);
+    }
+  };
+
   const renderMessage = ({ item }: { item: ChatMessage }) => (
     <MessageBubble message={item} />
-  );
-
-  const SuggestionCard = ({
-    icon,
-    title,
-    query,
-  }: {
-    icon: React.ReactNode;
-    title: string;
-    query: string;
-  }) => (
-    <TouchableOpacity
-      style={styles.suggestionCard}
-      onPress={() => send(query)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.suggestionIconContainer}>{icon}</View>
-      <Text style={styles.suggestionTitle}>{title}</Text>
-    </TouchableOpacity>
   );
 
   const renderEmpty = () => {
@@ -132,44 +118,72 @@ export default function ChatScreen() {
       );
     }
 
-    return (
-      <View style={styles.welcomeContainer}>
-        <ForestLogo size={100} />
-
-        <Text style={styles.welcomeTitle}>Achuar Wildlife</Text>
-        <Text style={styles.welcomeSubtitle}>Your rainforest companion</Text>
-
-        <Text style={styles.welcomeDescription}>
-          Ask about species, behaviors, tracks, or anything about the Amazon's wildlife
-        </Text>
-
-        <View style={styles.suggestionsGrid}>
-          <SuggestionCard
-            icon={<BirdIcon />}
-            title="Amazon birds"
-            query="What birds are common in the Amazon rainforest?"
-          />
-          <SuggestionCard
-            icon={<PawIcon />}
-            title="Jaguar tracks"
-            query="How can I identify a jaguar from its tracks?"
-          />
-          <SuggestionCard
-            icon={<WaterIcon />}
-            title="River otters"
-            query="Tell me about the giant river otter"
-          />
-        </View>
-      </View>
-    );
+    return null;
   };
 
   const hasMessages = messages.length > 0;
+
+  // Leader mode header component
+  const LeaderModeHeader = () => (
+    <View style={styles.leaderHeader}>
+      <TouchableOpacity
+        style={[styles.leaderButton, isElder && styles.leaderButtonActive]}
+        onPress={() => !isElder && setShowPatternLock(true)}
+        activeOpacity={0.7}
+      >
+        <LeaderIcon color={isElder ? colors.textLight : colors.primary} size={18} />
+        <Text style={[styles.leaderButtonText, isElder && styles.leaderButtonTextActive]}>
+          {isElder ? 'Leader Mode Active' : 'Activate Leader Mode'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // Pattern lock modal
+  const PatternLockModal = () => (
+    <Modal
+      visible={showPatternLock}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => setShowPatternLock(false)}
+    >
+      <SafeAreaView style={styles.modalContainer}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity
+            onPress={() => setShowPatternLock(false)}
+            style={styles.closeButton}
+          >
+            <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+              <Path
+                d="M18 6L6 18M6 6L18 18"
+                stroke={colors.text}
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
+            </Svg>
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>Leader Access</Text>
+          <View style={{ width: 44 }} />
+        </View>
+
+        <View style={styles.patternContainer}>
+          <Text style={styles.patternInstructions}>
+            Draw the pattern to activate leader mode
+          </Text>
+          {patternError && (
+            <Text style={styles.patternErrorText}>Incorrect pattern, try again</Text>
+          )}
+          <PatternLock onPatternComplete={handlePatternComplete} />
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
 
   // ChatGPT-style: when no messages, show centered welcome with input
   if (!hasMessages && !loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
+        <LeaderModeHeader />
         <View style={styles.centeredContainer}>
           <ForestLogo size={100} />
 
@@ -183,31 +197,15 @@ export default function ChatScreen() {
           <Text style={styles.welcomeDescription}>
             Ask about species, behaviors, tracks, or anything about the Amazon's wildlife
           </Text>
-
-          <View style={styles.suggestionsGrid}>
-            <SuggestionCard
-              icon={<BirdIcon />}
-              title="Amazon birds"
-              query="What birds are common in the Amazon rainforest?"
-            />
-            <SuggestionCard
-              icon={<PawIcon />}
-              title="Jaguar tracks"
-              query="How can I identify a jaguar from its tracks?"
-            />
-            <SuggestionCard
-              icon={<WaterIcon />}
-              title="River otters"
-              query="Tell me about the giant river otter"
-            />
-          </View>
         </View>
+        <PatternLockModal />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <LeaderModeHeader />
       {hasMessages && (
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -258,6 +256,7 @@ export default function ChatScreen() {
       <View style={styles.inputWrapper}>
         <ChatInput onSend={send} disabled={sending || loading} />
       </View>
+      <PatternLockModal />
     </SafeAreaView>
   );
 }
@@ -367,46 +366,77 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: spacing.xl,
     maxWidth: 280,
   },
-  suggestionsGrid: {
+  leaderHeader: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    alignItems: 'flex-end',
+  },
+  leaderButton: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    maxWidth: SCREEN_WIDTH - spacing.xl * 2,
-  },
-  suggestionCard: {
-    width: (SCREEN_WIDTH - spacing.xl * 2 - spacing.sm * 2) / 3,
-    aspectRatio: 1,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
     borderWidth: 1,
-    borderColor: colors.borderLight,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    elevation: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.background,
   },
-  suggestionIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primaryMuted,
+  leaderButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  leaderButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.primary,
+  },
+  leaderButtonTextActive: {
+    color: colors.textLight,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  closeButton: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.sm,
   },
-  suggestionTitle: {
-    fontSize: 12,
-    fontWeight: '500',
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  patternContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  patternInstructions: {
+    fontSize: 16,
     color: colors.textSecondary,
     textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
+  patternErrorText: {
+    fontSize: 14,
+    color: colors.error,
+    textAlign: 'center',
+    marginBottom: spacing.md,
   },
   typingIndicator: {
     flexDirection: 'row',

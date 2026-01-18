@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { UserRole, AuthContextType, User } from '../types/auth';
 import { supabase } from '../services/supabase/client';
 
@@ -18,9 +18,37 @@ function generateUUID(): string {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Start authenticated as general user by default
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<UserRole | null>(null);
+  const [role, setRole] = useState<UserRole | null>('general');
+  const [initialized, setInitialized] = useState(false);
+
+  // Create the default general user on app start
+  useEffect(() => {
+    if (!initialized) {
+      const initUser = async () => {
+        const userId = generateUUID();
+        const { data, error } = await supabase
+          .from('users')
+          .insert({ id: userId, role: 'general' })
+          .select()
+          .single();
+
+        if (error) {
+          console.log('Error creating default user:', error);
+        }
+
+        setUser({
+          id: data?.id || userId,
+          role: 'general',
+          createdAt: new Date(data?.created_at || Date.now()),
+        });
+        setInitialized(true);
+      };
+      initUser();
+    }
+  }, [initialized]);
 
   const login = useCallback(async (userRole: UserRole) => {
     // Create user in Supabase
