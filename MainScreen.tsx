@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { 
-  View, Text, StyleSheet, TextInput, TouchableOpacity, 
-  FlatList, ActivityIndicator, KeyboardAvoidingView, Platform 
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  FlatList, ActivityIndicator, KeyboardAvoidingView, Platform, Animated
 } from 'react-native';
 import { useVoiceRecording } from './useVoiceRecording';
+import Constants from 'expo-constants';
 
 export default function MainScreen() {
   const [inputText, setInputText] = useState('');
@@ -13,9 +14,34 @@ export default function MainScreen() {
   const [loading, setLoading] = useState(false);
   const { isRecording, recordingTime, uploading, startRecording, stopRecording, uploadRecording, cancelRecording } = useVoiceRecording();
 
-  const GEMINI_API_KEY = "AIzaSyBzU6coZVfp_OX2IEwTLPEjaeU9qou6jMo";
-  
-  // FIX: Using the v1 endpoint with gemini-2.0-flash which is a supported model
+  const scale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    let loopAnim;
+    if (isRecording) {
+      loopAnim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(scale, { toValue: 1.12, duration: 550, useNativeDriver: true }),
+          Animated.timing(scale, { toValue: 1.0, duration: 550, useNativeDriver: true }),
+        ])
+      );
+      loopAnim.start();
+    } else {
+      Animated.timing(scale, { toValue: 1, duration: 150, useNativeDriver: true }).start();
+      if (loopAnim) loopAnim.stop();
+    }
+    return () => { if (loopAnim) loopAnim.stop(); };
+  }, [isRecording, scale]);
+
+  // Load API key from Expo config extras (populated from .env via app.config.js)
+  const GEMINI_API_KEY = (
+    // new Expo config shape
+    (Constants?.expoConfig && Constants.expoConfig.extra && Constants.expoConfig.extra.GEMINI_API_KEY) ||
+    // fallback to classic manifest
+    (Constants?.manifest && Constants.manifest.extra && Constants.manifest.extra.GEMINI_API_KEY) ||
+    ''
+  );
+
   const API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
   const sendMessage = async () => {
@@ -109,13 +135,15 @@ export default function MainScreen() {
           placeholder="Ask about wildlife..."
           placeholderTextColor="#999"
         />
-        <TouchableOpacity 
-          style={[styles.recordBtn, isRecording && styles.recordingActive]}
-          onPress={handleRecordPress}
-          disabled={uploading}
-        >
-          <Text style={styles.recordIcon}>{isRecording ? '⏹️' : '🎤'}</Text>
-        </TouchableOpacity>
+        <Animated.View style={{ transform: [{ scale }] }}>
+          <TouchableOpacity
+            style={[styles.recordBtn, isRecording && styles.recordingActive]}
+            onPress={handleRecordPress}
+            disabled={uploading}
+          >
+            <Text style={styles.recordIcon}>{isRecording ? '⏹️' : '●'}</Text>
+          </TouchableOpacity>
+        </Animated.View>
         <TouchableOpacity style={styles.sendBtn} onPress={sendMessage} disabled={isRecording || uploading}>
           <Text style={styles.sendText}>Send</Text>
         </TouchableOpacity>
@@ -143,7 +171,7 @@ const styles = StyleSheet.create({
   msgText: { fontSize: 16, color: '#333' },
   inputContainer: { flexDirection: 'row', padding: 15, backgroundColor: '#fff', alignItems: 'center', paddingBottom: Platform.OS === 'ios' ? 30 : 15 },
   input: { flex: 1, height: 45, borderWidth: 1, borderColor: '#ddd', borderRadius: 25, paddingHorizontal: 20, backgroundColor: '#fafafa' },
-  recordBtn: { marginLeft: 10, backgroundColor: '#ff6b6b', paddingVertical: 10, paddingHorizontal: 15, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  recordBtn: { marginLeft: 10, width: 56, height: 56, borderRadius: 28, backgroundColor: '#ff6b6b', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3, elevation: 5 },
   recordingActive: { backgroundColor: '#ff0000' },
   recordIcon: { fontSize: 20 },
   sendBtn: { marginLeft: 10, backgroundColor: '#007AFF', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 20 },

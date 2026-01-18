@@ -11,6 +11,7 @@ export const useVoiceRecording = () => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [uploading, setUploading] = useState(false);
   const recordingRef = useRef<Audio.Recording | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const startRecording = async () => {
     try {
@@ -27,9 +28,11 @@ export const useVoiceRecording = () => {
         playsInSilentModeIOS: true,
       });
 
-      // Start recording
+      // Create and start recording
       const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.prepareToRecordAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
       await recording.startAsync();
 
       recordingRef.current = recording;
@@ -41,8 +44,7 @@ export const useVoiceRecording = () => {
         setRecordingTime((prev) => prev + 1);
       }, 1000);
 
-      // Store interval ID for cleanup
-      recording.intervalId = interval as any;
+      intervalRef.current = interval;
     } catch (error) {
       console.error('Failed to start recording:', error);
       alert('Failed to start recording');
@@ -54,8 +56,9 @@ export const useVoiceRecording = () => {
       if (!recordingRef.current) return null;
 
       const recording = recordingRef.current;
-      if (recording.intervalId) {
-        clearInterval(recording.intervalId);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
 
       await recording.stopAndUnloadAsync();
@@ -97,6 +100,7 @@ export const useVoiceRecording = () => {
         return false;
       }
 
+      console.log('✓ Recording uploaded:', filename);
       alert('Recording uploaded successfully!');
       return true;
     } catch (error) {
@@ -114,8 +118,9 @@ export const useVoiceRecording = () => {
       if (!recordingRef.current) return;
 
       const recording = recordingRef.current;
-      if (recording.intervalId) {
-        clearInterval(recording.intervalId);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
 
       await recording.stopAndUnloadAsync();
