@@ -25,14 +25,31 @@ export async function startRecording(): Promise<boolean> {
       playsInSilentModeIOS: true,
     });
 
+    // Enable metering for waveform visualization
+    const recordingOptions = {
+      ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+      isMeteringEnabled: true,
+    };
+
     const { recording: newRecording } = await Audio.Recording.createAsync(
-      Audio.RecordingOptionsPresets.HIGH_QUALITY
+      recordingOptions
     );
     recording = newRecording;
     return true;
   } catch (error) {
     console.error('Failed to start recording:', error);
     return false;
+  }
+}
+
+// Get current metering level (-160 to 0 dB, where 0 is loudest)
+export async function getMeteringLevel(): Promise<number> {
+  if (!recording) return -160;
+  try {
+    const status = await recording.getStatusAsync();
+    return status.metering ?? -160;
+  } catch {
+    return -160;
   }
 }
 
