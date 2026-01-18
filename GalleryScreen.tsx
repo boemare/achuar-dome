@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
   imageIcon: { fontSize: 32 },
   folderIcon: { fontSize: 40 },
   mediaName: { marginTop: 8, fontSize: 12, color: '#666', maxWidth: itemWidth },
-  backButton: { paddingHorizontal: 15, paddingVertical: 8, backgroundColor: '#007AFF', borderRadius: 8, marginHorizontal: 15, marginTop: 10, alignSelf: 'flex-start' },
+  backButton: { paddingHorizontal: 35, paddingVertical: 16, backgroundColor: '#007AFF', borderRadius: 8, marginHorizontal: 15, marginTop: 10, alignSelf: 'flex-start' },
   backButtonText: { color: '#fff', fontWeight: '600' },
   infoContainer: { padding: 12, alignItems: 'center', marginHorizontal: 15, marginTop: 10, backgroundColor: '#e3f2fd', borderRadius: 8, borderLeftWidth: 4, borderLeftColor: '#2196f3' },
   infoText: { color: '#1976d2', textAlign: 'center', fontSize: 13, fontWeight: '500' },
@@ -328,6 +328,12 @@ export default function GalleryScreen() {
           <Text style={[styles.filterText, filterType === 'recordings' && styles.filterTextActive]}>Recordings</Text>
         </TouchableOpacity>
       </View>
+
+      {currentPath !== '' && (
+        <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
+          <Text style={styles.backButtonText}>← Back</Text>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.contentArea}>
         {filteredMedia.length === 0 ? (
