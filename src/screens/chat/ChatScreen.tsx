@@ -77,8 +77,8 @@ const LeaderIcon = ({ color = colors.primary, size = 20 }) => (
 const LEADER_PATTERN = [0, 3, 6, 7, 8];
 
 export default function ChatScreen() {
-  const { user, isElder, login } = useAuth();
-  const { messages, loading, sending, send, startNewConversation } = useChat(user?.id);
+  const { user, isElder, login, isReady } = useAuth();
+  const { messages, loading, sending, send, startNewConversation } = useChat(user?.id, isReady);
   const flatListRef = useRef<FlatList>(null);
   const [showPatternLock, setShowPatternLock] = useState(false);
   const [patternError, setPatternError] = useState(false);

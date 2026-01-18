@@ -17,7 +17,7 @@ interface UseChatResult {
   loadConversation: (id: string) => Promise<void>;
 }
 
-export function useChat(userId?: string): UseChatResult {
+export function useChat(userId?: string, isReady: boolean = false): UseChatResult {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -91,12 +91,12 @@ export function useChat(userId?: string): UseChatResult {
     [conversationId, messages]
   );
 
-  // Start a new conversation on mount if user is available
+  // Start a new conversation on mount if user is available and ready
   useEffect(() => {
-    if (userId && !conversationId) {
+    if (userId && isReady && !conversationId) {
       startNewConversation();
     }
-  }, [userId]);
+  }, [userId, isReady]);
 
   return {
     messages,

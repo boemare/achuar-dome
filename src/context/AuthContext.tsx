@@ -29,6 +29,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!initialized) {
       const initUser = async () => {
         const userId = generateUUID();
+
+        // Try to create user in database
         const { data, error } = await supabase
           .from('users')
           .insert({ id: userId, role: 'general' })
@@ -36,14 +38,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
           .single();
 
         if (error) {
-          console.log('Error creating default user:', error);
+          console.log('Error creating default user, retrying...', error);
+          // Retry once with a new UUID
+          const retryId = generateUUID();
+          const { data: retryData, error: retryError } = await supabase
+            .from('users')
+            .insert({ id: retryId, role: 'general' })
+            .select()
+            .single();
+
+          if (retryError) {
+            console.log('Retry failed, using local user:', retryError);
+          }
+
+          setUser({
+            id: retryData?.id || retryId,
+            role: 'general',
+            createdAt: new Date(retryData?.created_at || Date.now()),
+          });
+        } else {
+          setUser({
+            id: data.id,
+            role: 'general',
+            createdAt: new Date(data.created_at),
+          });
         }
 
-        setUser({
-          id: data?.id || userId,
-          role: 'general',
-          createdAt: new Date(data?.created_at || Date.now()),
-        });
         setInitialized(true);
       };
       initUser();
@@ -87,6 +107,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     login,
     logout,
     isElder: role === 'elder',
+    isReady: initialized && user !== null,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

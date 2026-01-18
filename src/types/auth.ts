@@ -16,4 +16,5 @@ export interface AuthContextType extends AuthState {
   login: (role: UserRole) => void;
   logout: () => void;
   isElder: boolean;
+  isReady: boolean; // True when user is created in database
 }
