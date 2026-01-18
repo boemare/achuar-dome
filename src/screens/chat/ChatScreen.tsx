@@ -152,8 +152,8 @@ export default function ChatScreen() {
     <Modal
       visible={showPatternLock}
       animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={() => setShowPatternLock(false)}
+      presentationStyle="fullScreen"
+      onRequestClose={() => {}} // Prevent back button dismiss on Android
     >
       <SafeAreaView style={styles.modalContainer}>
         <View style={styles.modalHeader}>
