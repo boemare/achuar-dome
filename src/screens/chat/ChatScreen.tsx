@@ -16,6 +16,7 @@ import { useChat } from '../../hooks/useChat';
 import MessageBubble from '../../components/chat/MessageBubble';
 import ChatInput from '../../components/chat/ChatInput';
 import PatternLock from '../../components/auth/PatternLock';
+import RecordingModal from '../../components/voice/RecordingModal';
 import { ChatMessage } from '../../services/ai/chat';
 import { colors } from '../../constants/colors';
 import { spacing, borderRadius } from '../../constants/spacing';
@@ -82,6 +83,8 @@ export default function ChatScreen() {
   const flatListRef = useRef<FlatList>(null);
   const [showPatternLock, setShowPatternLock] = useState(false);
   const [patternError, setPatternError] = useState(false);
+  const [showRecordingModal, setShowRecordingModal] = useState(false);
+  const [recordingNumber, setRecordingNumber] = useState(1);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -102,6 +105,15 @@ export default function ChatScreen() {
       setPatternError(true);
       setTimeout(() => setPatternError(false), 1000);
     }
+  };
+
+  const handleMicPress = () => {
+    setShowRecordingModal(true);
+  };
+
+  const handleRecordingComplete = () => {
+    setShowRecordingModal(false);
+    setRecordingNumber((prev) => prev + 1);
   };
 
   const renderMessage = ({ item }: { item: ChatMessage }) => (
@@ -205,7 +217,7 @@ export default function ChatScreen() {
 
           {/* Chat input - positioned for keyboard visibility */}
           <View style={styles.welcomeInputSection}>
-            <ChatInput onSend={send} disabled={sending || loading} />
+            <ChatInput onSend={send} onMicPress={handleMicPress} disabled={sending || loading} />
             <Text style={styles.welcomeHint}>
               Ask about species, behaviors, tracks, or anything about Amazon wildlife
             </Text>
@@ -213,6 +225,14 @@ export default function ChatScreen() {
         </View>
 
         <PatternLockModal />
+        <RecordingModal
+          visible={showRecordingModal}
+          onClose={() => setShowRecordingModal(false)}
+          onRecordingComplete={handleRecordingComplete}
+          userId={user?.id}
+          autoStart={true}
+          recordingNumber={recordingNumber}
+        />
       </SafeAreaView>
     );
   }
@@ -268,9 +288,17 @@ export default function ChatScreen() {
       )}
 
       <View style={styles.inputWrapper}>
-        <ChatInput onSend={send} disabled={sending || loading} />
+        <ChatInput onSend={send} onMicPress={handleMicPress} disabled={sending || loading} />
       </View>
       <PatternLockModal />
+      <RecordingModal
+        visible={showRecordingModal}
+        onClose={() => setShowRecordingModal(false)}
+        onRecordingComplete={handleRecordingComplete}
+        userId={user?.id}
+        autoStart={true}
+        recordingNumber={recordingNumber}
+      />
     </SafeAreaView>
   );
 }
