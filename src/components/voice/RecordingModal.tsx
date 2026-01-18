@@ -6,8 +6,10 @@ import {
   Modal,
   TouchableOpacity,
   ActivityIndicator,
+  Dimensions,
+  TouchableWithoutFeedback,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRecording } from '../../hooks/useRecording';
 import { uploadMedia } from '../../services/supabase/media';
 import { colors } from '../../constants/colors';
@@ -29,6 +31,8 @@ export interface RecordingModalRef {
   stopAndClose: () => void;
 }
 
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
   visible,
   onClose,
@@ -37,6 +41,7 @@ const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
   userId,
   autoStart = false,
 }, ref) => {
+  const insets = useSafeAreaInsets();
   const {
     isRecording,
     duration,
@@ -119,49 +124,86 @@ const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      transparent={true}
       onRequestClose={handleClose}
     >
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-            <Text style={styles.closeText}>Cancel</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>Recording</Text>
-          <View style={styles.closeButton} />
-        </View>
+      <View style={styles.overlay}>
+        {/* Tap backdrop to cancel */}
+        <TouchableWithoutFeedback onPress={handleClose}>
+          <View style={styles.backdrop} />
+        </TouchableWithoutFeedback>
 
-        <View style={styles.recordingSection}>
-          <View style={styles.timerContainer}>
-            <Text style={styles.timer}>{formatDuration(duration)}</Text>
-            {isRecording && <Text style={styles.recordingLabel}>Recording...</Text>}
-            {saving && <Text style={styles.savingLabel}>Saving...</Text>}
+        {/* Bottom sheet */}
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>
+          {/* Handle bar */}
+          <View style={styles.handleContainer}>
+            <View style={styles.handle} />
           </View>
 
-          {saving ? (
-            <View style={styles.savingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={[styles.recordButton, isRecording && styles.recordButtonActive]}
-              onPress={stopSaveAndClose}
-              activeOpacity={0.8}
-              disabled={saving}
-            >
-              <View style={[styles.recordInner, isRecording && styles.recordInnerActive]} />
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+              <Text style={styles.closeText}>Cancel</Text>
             </TouchableOpacity>
-          )}
+            <Text style={styles.title}>Recording</Text>
+            <View style={styles.closeButton} />
+          </View>
+
+          {/* Recording content */}
+          <View style={styles.recordingSection}>
+            <View style={styles.timerContainer}>
+              <Text style={styles.timer}>{formatDuration(duration)}</Text>
+              {isRecording && <Text style={styles.recordingLabel}>Recording...</Text>}
+              {saving && <Text style={styles.savingLabel}>Saving...</Text>}
+            </View>
+
+            {saving ? (
+              <View style={styles.savingContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.recordButton, isRecording && styles.recordButtonActive]}
+                onPress={stopSaveAndClose}
+                activeOpacity={0.8}
+                disabled={saving}
+              >
+                <View style={[styles.recordInner, isRecording && styles.recordInnerActive]} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 });
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  sheet: {
     backgroundColor: colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    minHeight: SCREEN_HEIGHT * 0.45,
+    maxHeight: SCREEN_HEIGHT * 0.5,
+  },
+  handleContainer: {
+    alignItems: 'center',
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  handle: {
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.border,
   },
   header: {
     flexDirection: 'row',
@@ -188,14 +230,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: spacing.xl,
+    padding: spacing.lg,
   },
   timerContainer: {
     alignItems: 'center',
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.xl,
   },
   timer: {
-    fontSize: 64,
+    fontSize: 56,
     fontWeight: '200',
     color: colors.text,
   },
@@ -223,7 +265,6 @@ const styles = StyleSheet.create({
     borderColor: colors.recording,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing.xl,
   },
   recordButtonActive: {
     borderColor: colors.recording,
