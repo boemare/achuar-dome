@@ -10,10 +10,12 @@ import { colors } from '../../constants/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_SIZE = 3;
-const DOT_SIZE = 20;
-const GRID_PADDING = 40;
+const DOT_SIZE = 24;
+const GRID_PADDING = 60;
+const TOUCH_PADDING = 60; // Extra padding for touch area outside the grid
 const GRID_WIDTH = SCREEN_WIDTH - GRID_PADDING * 2;
 const CELL_SIZE = GRID_WIDTH / GRID_SIZE;
+const TOUCH_AREA_SIZE = GRID_WIDTH + TOUCH_PADDING * 2;
 
 interface Point {
   row: number;
@@ -33,14 +35,15 @@ export default function PatternLock({ onPatternComplete, disabled = false }: Pat
   const containerRef = useRef<View>(null);
   const layoutRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  // Points are offset by TOUCH_PADDING to center them in the larger touch area
   const points: Point[] = [];
   for (let row = 0; row < GRID_SIZE; row++) {
     for (let col = 0; col < GRID_SIZE; col++) {
       points.push({
         row,
         col,
-        x: col * CELL_SIZE + CELL_SIZE / 2,
-        y: row * CELL_SIZE + CELL_SIZE / 2,
+        x: TOUCH_PADDING + col * CELL_SIZE + CELL_SIZE / 2,
+        y: TOUCH_PADDING + row * CELL_SIZE + CELL_SIZE / 2,
       });
     }
   }
@@ -50,7 +53,8 @@ export default function PatternLock({ onPatternComplete, disabled = false }: Pat
   };
 
   const findNearestPoint = (x: number, y: number): Point | null => {
-    const threshold = CELL_SIZE / 2;
+    // Larger threshold for thick fingers - 70% of cell size
+    const threshold = CELL_SIZE * 0.7;
     for (const point of points) {
       const distance = Math.sqrt(Math.pow(x - point.x, 2) + Math.pow(y - point.y, 2));
       if (distance < threshold) {
@@ -197,8 +201,8 @@ export default function PatternLock({ onPatternComplete, disabled = false }: Pat
 
 const styles = StyleSheet.create({
   container: {
-    width: GRID_WIDTH,
-    height: GRID_WIDTH,
+    width: TOUCH_AREA_SIZE,
+    height: TOUCH_AREA_SIZE,
     position: 'relative',
   },
   dot: {
@@ -207,16 +211,20 @@ const styles = StyleSheet.create({
     height: DOT_SIZE,
     borderRadius: DOT_SIZE / 2,
     backgroundColor: colors.border,
+    borderWidth: 2,
+    borderColor: colors.borderLight,
   },
   dotSelected: {
     backgroundColor: colors.primary,
-    transform: [{ scale: 1.5 }],
+    borderColor: colors.primaryLight,
+    transform: [{ scale: 1.4 }],
   },
   line: {
     position: 'absolute',
-    height: 4,
+    height: 5,
     backgroundColor: colors.primary,
     transformOrigin: 'left center',
+    borderRadius: 2.5,
   },
   currentLine: {
     opacity: 0.5,

@@ -84,7 +84,7 @@ export default function ChatInput({
             >
               <SendIcon
                 color={canSend ? colors.textLight : colors.textMuted}
-                size={18}
+                size={20}
               />
             </TouchableOpacity>
           </View>
@@ -98,24 +98,24 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.background,
+    backgroundColor: 'transparent',
   },
   inputWrapper: {
-    shadowColor: colors.primaryDark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 6,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    minHeight: 56,
-    maxHeight: 160,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: colors.primaryMuted,
+    minHeight: 60,
+    maxHeight: 180,
     paddingLeft: spacing.lg,
     paddingRight: spacing.sm,
     paddingVertical: spacing.sm,
@@ -126,20 +126,25 @@ const styles = StyleSheet.create({
     color: colors.text,
     paddingVertical: spacing.md,
     paddingRight: spacing.sm,
-    maxHeight: 140,
+    maxHeight: 160,
     fontSize: 17,
     lineHeight: 24,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.borderLight,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
   },
   sendButtonActive: {
     backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
 });

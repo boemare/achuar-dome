@@ -123,16 +123,24 @@ export default function ChatScreen() {
 
   const hasMessages = messages.length > 0;
 
-  // Leader mode header component
-  const LeaderModeHeader = () => (
-    <View style={styles.leaderHeader}>
+  // Leader mode header component - centered and larger
+  const LeaderModeHeader = ({ compact = false }: { compact?: boolean }) => (
+    <View style={[styles.leaderHeader, compact && styles.leaderHeaderCompact]}>
       <TouchableOpacity
-        style={[styles.leaderButton, isElder && styles.leaderButtonActive]}
+        style={[
+          styles.leaderButton,
+          isElder && styles.leaderButtonActive,
+          compact && styles.leaderButtonCompact,
+        ]}
         onPress={() => !isElder && setShowPatternLock(true)}
         activeOpacity={0.7}
       >
-        <LeaderIcon color={isElder ? colors.textLight : colors.primary} size={18} />
-        <Text style={[styles.leaderButtonText, isElder && styles.leaderButtonTextActive]}>
+        <LeaderIcon color={isElder ? colors.textLight : colors.primary} size={compact ? 18 : 22} />
+        <Text style={[
+          styles.leaderButtonText,
+          isElder && styles.leaderButtonTextActive,
+          compact && styles.leaderButtonTextCompact,
+        ]}>
           {isElder ? 'Leader Mode Active' : 'Activate Leader Mode'}
         </Text>
       </TouchableOpacity>
@@ -179,25 +187,31 @@ export default function ChatScreen() {
     </Modal>
   );
 
-  // ChatGPT-style: when no messages, show centered welcome with input
+  // Welcome screen with better layout for keyboard visibility
   if (!hasMessages && !loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
+        {/* Leader button at top center */}
         <LeaderModeHeader />
-        <View style={styles.centeredContainer}>
-          <ForestLogo size={100} />
 
-          <Text style={styles.welcomeTitle}>Achuar Wildlife</Text>
-          <Text style={styles.welcomeSubtitle}>Your rainforest companion</Text>
-
-          <View style={styles.centeredInputWrapper}>
-            <ChatInput onSend={send} disabled={sending || loading} />
+        {/* Main content area */}
+        <View style={styles.welcomeContent}>
+          {/* Logo and title section */}
+          <View style={styles.welcomeHeader}>
+            <ForestLogo size={90} />
+            <Text style={styles.welcomeTitle}>Achuar Wildlife</Text>
+            <Text style={styles.welcomeSubtitle}>Your rainforest companion</Text>
           </View>
 
-          <Text style={styles.welcomeDescription}>
-            Ask about species, behaviors, tracks, or anything about the Amazon's wildlife
-          </Text>
+          {/* Chat input - positioned for keyboard visibility */}
+          <View style={styles.welcomeInputSection}>
+            <ChatInput onSend={send} disabled={sending || loading} />
+            <Text style={styles.welcomeHint}>
+              Ask about species, behaviors, tracks, or anything about Amazon wildlife
+            </Text>
+          </View>
         </View>
+
         <PatternLockModal />
       </SafeAreaView>
     );
@@ -205,7 +219,7 @@ export default function ChatScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <LeaderModeHeader />
+      <LeaderModeHeader compact />
       {hasMessages && (
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -266,16 +280,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  centeredContainer: {
+  welcomeContent: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     paddingHorizontal: spacing.lg,
   },
-  centeredInputWrapper: {
-    width: '100%',
-    maxWidth: 400,
-    marginVertical: spacing.xl,
+  welcomeHeader: {
+    alignItems: 'center',
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
+  },
+  welcomeInputSection: {
+    paddingTop: spacing.md,
+  },
+  welcomeHint: {
+    fontSize: 14,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.md,
+    lineHeight: 20,
   },
   header: {
     flexDirection: 'row',
@@ -329,13 +352,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 15,
   },
-  welcomeContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingBottom: 60,
-  },
   logoContainer: {
     borderRadius: 50,
     backgroundColor: colors.surfaceElevated,
@@ -358,40 +374,52 @@ const styles = StyleSheet.create({
   welcomeSubtitle: {
     fontSize: 16,
     color: colors.textSecondary,
-    marginBottom: spacing.lg,
     letterSpacing: 0.2,
-  },
-  welcomeDescription: {
-    fontSize: 15,
-    color: colors.textMuted,
-    textAlign: 'center',
-    lineHeight: 22,
-    maxWidth: 280,
   },
   leaderHeader: {
     paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  leaderHeaderCompact: {
     paddingVertical: spacing.sm,
     alignItems: 'flex-end',
   },
   leaderButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.full,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceElevated,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  leaderButtonCompact: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: borderRadius.full,
     borderWidth: 1,
-    borderColor: colors.primary,
-    backgroundColor: colors.background,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   leaderButtonActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
   leaderButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  leaderButtonTextCompact: {
     fontSize: 13,
     fontWeight: '500',
-    color: colors.primary,
   },
   leaderButtonTextActive: {
     color: colors.textLight,
