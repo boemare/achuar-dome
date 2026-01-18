@@ -8,14 +8,17 @@ import {
 } from 'react-native';
 import { colors } from '../../constants/colors';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GRID_SIZE = 3;
-const DOT_SIZE = 24;
+const DOT_SIZE = 28;
 const GRID_PADDING = 60;
-const TOUCH_PADDING = 60; // Extra padding for touch area outside the grid
+// Very large touch padding - covers most of the screen so finger can go anywhere
+const TOUCH_PADDING = 100;
 const GRID_WIDTH = SCREEN_WIDTH - GRID_PADDING * 2;
 const CELL_SIZE = GRID_WIDTH / GRID_SIZE;
-const TOUCH_AREA_SIZE = GRID_WIDTH + TOUCH_PADDING * 2;
+// Make touch area fill most of available space
+const TOUCH_AREA_WIDTH = SCREEN_WIDTH;
+const TOUCH_AREA_HEIGHT = SCREEN_HEIGHT * 0.6;
 
 interface Point {
   row: number;
@@ -35,15 +38,19 @@ export default function PatternLock({ onPatternComplete, disabled = false }: Pat
   const containerRef = useRef<View>(null);
   const layoutRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Points are offset by TOUCH_PADDING to center them in the larger touch area
+  // Calculate offsets to center the grid in the large touch area
+  const gridOffsetX = (TOUCH_AREA_WIDTH - GRID_WIDTH) / 2;
+  const gridOffsetY = (TOUCH_AREA_HEIGHT - GRID_WIDTH) / 2;
+
+  // Points are centered in the touch area
   const points: Point[] = [];
   for (let row = 0; row < GRID_SIZE; row++) {
     for (let col = 0; col < GRID_SIZE; col++) {
       points.push({
         row,
         col,
-        x: TOUCH_PADDING + col * CELL_SIZE + CELL_SIZE / 2,
-        y: TOUCH_PADDING + row * CELL_SIZE + CELL_SIZE / 2,
+        x: gridOffsetX + col * CELL_SIZE + CELL_SIZE / 2,
+        y: gridOffsetY + row * CELL_SIZE + CELL_SIZE / 2,
       });
     }
   }
@@ -53,15 +60,19 @@ export default function PatternLock({ onPatternComplete, disabled = false }: Pat
   };
 
   const findNearestPoint = (x: number, y: number): Point | null => {
-    // Larger threshold for thick fingers - 70% of cell size
-    const threshold = CELL_SIZE * 0.7;
+    // Very large threshold for thick fingers - 85% of cell size
+    const threshold = CELL_SIZE * 0.85;
+    let nearestPoint: Point | null = null;
+    let nearestDistance = Infinity;
+
     for (const point of points) {
       const distance = Math.sqrt(Math.pow(x - point.x, 2) + Math.pow(y - point.y, 2));
-      if (distance < threshold) {
-        return point;
+      if (distance < threshold && distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestPoint = point;
       }
     }
-    return null;
+    return nearestPoint;
   };
 
   const isPointSelected = (point: Point): boolean => {
@@ -111,6 +122,9 @@ export default function PatternLock({ onPatternComplete, disabled = false }: Pat
     onPanResponderMove: handleTouchMove,
     onPanResponderRelease: handleTouchEnd,
     onPanResponderTerminate: handleTouchEnd,
+    // Prevent other views from stealing the gesture
+    onPanResponderTerminationRequest: () => false,
+    onShouldBlockNativeResponder: () => true,
   });
 
   const renderLines = () => {
@@ -201,8 +215,8 @@ export default function PatternLock({ onPatternComplete, disabled = false }: Pat
 
 const styles = StyleSheet.create({
   container: {
-    width: TOUCH_AREA_SIZE,
-    height: TOUCH_AREA_SIZE,
+    width: TOUCH_AREA_WIDTH,
+    height: TOUCH_AREA_HEIGHT,
     position: 'relative',
   },
   dot: {
@@ -211,20 +225,20 @@ const styles = StyleSheet.create({
     height: DOT_SIZE,
     borderRadius: DOT_SIZE / 2,
     backgroundColor: colors.border,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: colors.borderLight,
   },
   dotSelected: {
     backgroundColor: colors.primary,
     borderColor: colors.primaryLight,
-    transform: [{ scale: 1.4 }],
+    transform: [{ scale: 1.3 }],
   },
   line: {
     position: 'absolute',
-    height: 5,
+    height: 6,
     backgroundColor: colors.primary,
     transformOrigin: 'left center',
-    borderRadius: 2.5,
+    borderRadius: 3,
   },
   currentLine: {
     opacity: 0.5,

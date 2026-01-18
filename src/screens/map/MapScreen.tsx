@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,12 @@ import {
   ScrollView,
   Dimensions,
   ActivityIndicator,
+  PanResponder,
+  Animated,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useObservations } from '../../hooks/useObservations';
 import { ObservationWithMedia } from '../../services/supabase/observations';
@@ -18,6 +21,10 @@ import { colors } from '../../constants/colors';
 import { spacing, borderRadius } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { formatDateTime } from '../../utils/formatters';
+
+const EDGE_SWIPE_THRESHOLD = 40; // Width of edge swipe zone
+const SWIPE_VELOCITY_THRESHOLD = 0.3; // Minimum velocity to trigger navigation
+const SWIPE_DISTANCE_THRESHOLD = 80; // Minimum distance to trigger navigation
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -42,6 +49,63 @@ export default function MapScreen() {
     useObservations(undefined, isElder);
   const mapRef = useRef<MapView>(null);
   const [mapReady, setMapReady] = useState(false);
+  const navigation = useNavigation();
+  const edgeSwipeIndicator = useRef(new Animated.Value(0)).current;
+
+  // Edge swipe gesture to navigate to Chat (like Snapchat)
+  const edgeSwipePanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: (evt) => {
+          // Only capture if touch starts from right edge
+          const { pageX } = evt.nativeEvent;
+          return pageX >= SCREEN_WIDTH - EDGE_SWIPE_THRESHOLD;
+        },
+        onMoveShouldSetPanResponder: (evt, gestureState) => {
+          // Capture if swiping left from right edge
+          return gestureState.dx < -10 && gestureState.moveX >= SCREEN_WIDTH - EDGE_SWIPE_THRESHOLD * 2;
+        },
+        onPanResponderGrant: () => {
+          // Show swipe indicator
+          Animated.timing(edgeSwipeIndicator, {
+            toValue: 1,
+            duration: 100,
+            useNativeDriver: true,
+          }).start();
+        },
+        onPanResponderMove: (evt, gestureState) => {
+          // Update indicator based on swipe progress
+          const progress = Math.min(Math.abs(gestureState.dx) / SWIPE_DISTANCE_THRESHOLD, 1);
+          edgeSwipeIndicator.setValue(progress);
+        },
+        onPanResponderRelease: (evt, gestureState) => {
+          // Check if swipe was fast enough or far enough
+          const shouldNavigate =
+            gestureState.vx < -SWIPE_VELOCITY_THRESHOLD ||
+            Math.abs(gestureState.dx) > SWIPE_DISTANCE_THRESHOLD;
+
+          if (shouldNavigate) {
+            // Navigate to Chat tab
+            navigation.navigate('Chat' as never);
+          }
+
+          // Hide indicator
+          Animated.timing(edgeSwipeIndicator, {
+            toValue: 0,
+            duration: 150,
+            useNativeDriver: true,
+          }).start();
+        },
+        onPanResponderTerminate: () => {
+          Animated.timing(edgeSwipeIndicator, {
+            toValue: 0,
+            duration: 150,
+            useNativeDriver: true,
+          }).start();
+        },
+      }),
+    [navigation, edgeSwipeIndicator]
+  );
 
   const handleMarkerPress = useCallback(
     (observation: ObservationWithMedia) => {
@@ -194,6 +258,29 @@ export default function MapScreen() {
       <TouchableOpacity style={styles.refreshButton} onPress={refresh} activeOpacity={0.8}>
         <Text style={styles.refreshText}>Refresh</Text>
       </TouchableOpacity>
+
+      {/* Edge swipe zone for navigation to Chat */}
+      <View
+        style={styles.edgeSwipeZone}
+        {...edgeSwipePanResponder.panHandlers}
+      >
+        <Animated.View
+          style={[
+            styles.edgeSwipeIndicator,
+            {
+              opacity: edgeSwipeIndicator,
+              transform: [
+                {
+                  translateX: edgeSwipeIndicator.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [20, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        />
+      </View>
     </View>
   );
 }
@@ -364,5 +451,22 @@ const styles = StyleSheet.create({
   refreshText: {
     ...typography.button,
     color: colors.textLight,
+  },
+  edgeSwipeZone: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: EDGE_SWIPE_THRESHOLD,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+  },
+  edgeSwipeIndicator: {
+    width: 6,
+    height: 60,
+    backgroundColor: colors.primary,
+    borderTopLeftRadius: 3,
+    borderBottomLeftRadius: 3,
+    marginRight: 2,
   },
 });
