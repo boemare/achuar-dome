@@ -72,7 +72,18 @@ Create a file called `.env` in the project root:
 ```
 EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+EXPO_PUBLIC_AI_API_KEY=your-google-gemini-api-key-here
 ```
+
+### Get Your Google Gemini API Key
+1. Go to https://makersuite.google.com/app/apikey (or https://aistudio.google.com/app/apikey)
+2. Sign up / Log in with your Google account
+3. Click "Create API Key"
+4. Select or create a Google Cloud project
+5. Copy the API key (starts with `AIzaSy...`)
+6. Paste it into your `.env` file as `EXPO_PUBLIC_AI_API_KEY`
+
+**Note:** The chatbot requires a Google Gemini API key to function. Without it, users will see an error message when trying to chat.
 
 ---
 

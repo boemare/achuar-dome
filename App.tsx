@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { ChatProvider, useChatContext } from './src/context/ChatContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import VoiceButton from './src/components/voice/VoiceButton';
 import RecordingModal, { RecordingModalRef } from './src/components/voice/RecordingModal';
@@ -13,6 +14,7 @@ import { colors } from './src/constants/colors';
 
 function AppContent() {
   const { isAuthenticated, user } = useAuth();
+  const { hasMessages: chatHasMessages } = useChatContext();
   const [recordingModalVisible, setRecordingModalVisible] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const recordingModalRef = useRef<RecordingModalRef>(null);
@@ -44,7 +46,9 @@ function AppContent() {
 
       {isAuthenticated && (
         <>
-          <VoiceButton onPress={handleVoicePress} isRecording={isRecording} />
+          {!chatHasMessages && (
+            <VoiceButton onPress={handleVoicePress} isRecording={isRecording} />
+          )}
           <RecordingModal
             ref={recordingModalRef}
             visible={recordingModalVisible}
@@ -65,9 +69,11 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <NavigationContainer>
-            <AppContent />
-          </NavigationContainer>
+          <ChatProvider>
+            <NavigationContainer>
+              <AppContent />
+            </NavigationContainer>
+          </ChatProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

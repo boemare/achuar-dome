@@ -93,13 +93,17 @@ achuar/
 
 ## Environment Variables
 
-Create a `.env` file:
+Create a `.env` file in the project root:
 
 ```
 EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-EXPO_PUBLIC_PERPLEXITY_API_KEY=your_perplexity_key
+EXPO_PUBLIC_AI_API_KEY=your_perplexity_api_key
 ```
+
+**Getting your API keys:**
+- **Supabase**: Get from https://supabase.com/dashboard/project/YOUR_PROJECT/settings/api
+- **Google Gemini**: Get from https://makersuite.google.com/app/apikey (Create API Key)
 
 ## Contributing
 

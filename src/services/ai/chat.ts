@@ -1,6 +1,9 @@
 import { supabase } from '../supabase/client';
 
-const AI_API_URL = process.env.EXPO_PUBLIC_AI_API_URL || 'https://api.perplexity.ai';
+// Google Gemini API configuration
+// Common Gemini model names: gemini-pro, gemini-1.5-pro, gemini-1.5-flash-latest
+const GEMINI_MODEL = 'gemini-pro';
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const AI_API_KEY = process.env.EXPO_PUBLIC_AI_API_KEY || '';
 
 export interface ChatMessage {
@@ -34,42 +37,206 @@ Be respectful of indigenous knowledge and traditions. Provide responses that are
 
 When uncertain, acknowledge limitations and suggest consulting local elders or experts.`;
 
+// Helper function to list available models (for debugging)
+async function listAvailableModels(): Promise<string[]> {
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${AI_API_KEY}`
+    );
+    if (response.ok) {
+      const data = await response.json();
+      return (data.models || []).map((m: any) => m.name?.replace('models/', '') || m.name).filter(Boolean);
+    }
+  } catch (error) {
+    console.error('Error listing models:', error);
+  }
+  return [];
+}
+
 export async function sendMessage(
   conversationId: string,
   userMessage: string,
   previousMessages: ChatMessage[]
 ): Promise<string> {
   if (!AI_API_KEY) {
-    return "AI service not configured. Please add your API key to the .env file.";
+    return "AI service not configured. Please add EXPO_PUBLIC_AI_API_KEY to your .env file with your Google Gemini API key.";
+  }
+
+  // Validate API key format (Google API keys start with AIzaSy)
+  if (!AI_API_KEY.startsWith('AIzaSy')) {
+    console.warn('API key format may be incorrect. Google API keys typically start with "AIzaSy"');
   }
 
   try {
-    const messages = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...previousMessages.map((m) => ({ role: m.role, content: m.content })),
-      { role: 'user', content: userMessage },
+    // Convert chat messages to Gemini format
+    // Gemini uses "parts" with "text" content and "model" instead of "assistant"
+    const conversationHistory = previousMessages.map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
+
+    // Build contents array - Gemini expects alternating user/model messages
+    let contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+
+    // Add system prompt as first user message with instructions
+    if (previousMessages.length === 0) {
+      contents.push({
+        role: 'user',
+        parts: [{ text: `${SYSTEM_PROMPT}\n\nUser: ${userMessage}` }],
+      });
+    } else {
+      // Create a copy of conversation history to avoid mutation
+      contents = conversationHistory.map((msg, index) => {
+        // Prepend system prompt to first user message
+        if (index === 0 && msg.role === 'user' && previousMessages.length <= 2) {
+          return {
+            ...msg,
+            parts: [{ text: `${SYSTEM_PROMPT}\n\n${msg.parts[0].text}` }],
+          };
+        }
+        return msg;
+      });
+      
+      // Add current user message
+      contents.push({
+        role: 'user',
+        parts: [{ text: userMessage }],
+      });
+    }
+
+    // Try different Gemini models in order of preference
+    // Updated to use newer model names that are actually available
+    const modelsToTry = [
+      'gemini-2.5-flash',  // Newer, faster model
+      'gemini-2.5-pro',  // Newer, more capable model
+      'gemini-flash-latest',  // Latest flash version
+      'gemini-pro-latest',  // Latest pro version
+      'gemini-2.0-flash',  // Alternative flash version
+      'gemini-2.5-flash-lite',  // Lite version if others don't work
     ];
 
-    const response = await fetch(`${AI_API_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${AI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'llama-3.1-sonar-small-128k-online',
-        messages,
-        temperature: 0.7,
-        max_tokens: 500,
-      }),
-    });
+    let response: Response | null = null;
+    let currentApiUrl = '';
+    let lastError: any = null;
+
+    for (const model of modelsToTry) {
+      currentApiUrl = `${GEMINI_API_BASE}/${model}:generateContent?key=${AI_API_KEY}`;
+      
+      try {
+        response = await fetch(currentApiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents,
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 500,
+            },
+          }),
+        });
+
+        if (response.ok) {
+          console.log(`Successfully using model: ${model}`);
+          break;
+        }
+
+        // If 404, try next model
+        if (response.status === 404) {
+          const errorText = await response.text().catch(() => '');
+          lastError = errorText;
+          console.log(`Model ${model} returned 404, trying next model...`);
+          response = null;
+          continue;
+        }
+
+        // For 403 (forbidden), might be API key issue
+        if (response.status === 403) {
+          const errorText = await response.text().catch(() => '');
+          lastError = errorText;
+          console.log(`Model ${model} returned 403 (forbidden), trying next model...`);
+          response = null;
+          continue;
+        }
+
+        // For 400 (bad request), might be model-specific issue, try next
+        if (response.status === 400) {
+          const errorText = await response.text().catch(() => '');
+          lastError = errorText;
+          console.log(`Model ${model} returned 400 (bad request), trying next model...`);
+          response = null;
+          continue;
+        }
+
+        // For other errors, log and try next
+        console.log(`Model ${model} returned ${response.status}, trying next model...`);
+        const errorText = await response.text().catch(() => '');
+        lastError = errorText;
+        response = null;
+        continue;
+      } catch (error) {
+        console.error(`Error with model ${model}:`, error);
+        lastError = error;
+        response = null;
+        continue;
+      }
+    }
+
+    if (!response) {
+      // Try to list available models for better error message
+      console.log('All models failed, checking available models...');
+      const availableModels = await listAvailableModels();
+      
+      let errorMsg = 'No working Gemini model found. ';
+      
+      if (availableModels.length > 0) {
+        errorMsg += `Available models: ${availableModels.join(', ')}. `;
+        errorMsg += 'The code tried: ' + modelsToTry.join(', ') + '. ';
+        errorMsg += 'Please ensure your API key has access to at least one of these models.';
+      } else {
+        errorMsg += 'Could not retrieve list of available models. ';
+        errorMsg += 'Please check:\n';
+        errorMsg += '1. Your API key is valid (starts with AIzaSy...)\n';
+        errorMsg += '2. Generative Language API is enabled in Google Cloud Console\n';
+        errorMsg += '3. Your API key has the necessary permissions\n';
+        errorMsg += '4. The API key is associated with a project that has billing enabled (if required)';
+      }
+      
+      console.error('Final error:', lastError);
+      throw new Error(errorMsg);
+    }
 
     if (!response.ok) {
-      throw new Error(`AI API error: ${response.status}`);
+      const errorText = await response.text().catch(() => '');
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { error: errorText };
+      }
+      
+      console.error('Gemini API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        url: currentApiUrl.replace(AI_API_KEY, 'HIDDEN'),
+        error: errorData,
+      });
+      
+      if (response.status === 404) {
+        return `The AI model is not available (404). Please ensure:\n1. Your API key is valid\n2. Gemini API is enabled in Google Cloud Console\n3. The API key has access to Gemini models\n\nError: ${errorData.error?.message || errorText}`;
+      }
+      
+      if (response.status === 403) {
+        return `API access denied (403). Please check:\n1. Your API key is correct\n2. Gemini API is enabled in Google Cloud Console\n3. Your API key has the necessary permissions`;
+      }
+      
+      throw new Error(`AI API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || 'No response received';
+    // Gemini response format: data.candidates[0].content.parts[0].text
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response received';
   } catch (error) {
     console.error('AI chat error:', error);
     return "I'm having trouble connecting right now. Please try again later.";

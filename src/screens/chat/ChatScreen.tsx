@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,9 @@ import {
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
+import { useChatContext } from '../../context/ChatContext';
 import { useChat } from '../../hooks/useChat';
 import MessageBubble from '../../components/chat/MessageBubble';
 import ChatInput from '../../components/chat/ChatInput';
@@ -79,6 +81,7 @@ const LEADER_PATTERN = [0, 3, 6, 7, 8];
 
 export default function ChatScreen() {
   const { user, isElder, login, isReady } = useAuth();
+  const { setHasMessages } = useChatContext();
   const { messages, loading, sending, send, startNewConversation } = useChat(user?.id, isReady);
   const flatListRef = useRef<FlatList>(null);
   const [showPatternLock, setShowPatternLock] = useState(false);
@@ -92,7 +95,23 @@ export default function ChatScreen() {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [messages.length]);
+    // Update chat context when messages change
+    setHasMessages(messages.length > 0);
+  }, [messages.length, setHasMessages]);
+
+  // Track focus state to detect when user navigates away
+  const isFocused = useIsFocused();
+  const wasFocusedRef = useRef(isFocused);
+
+  useEffect(() => {
+    // When screen transitions from focused to unfocused, clear the chat
+    if (wasFocusedRef.current && !isFocused && messages.length > 0) {
+      startNewConversation();
+      setHasMessages(false);
+    }
+    // Update the ref to track current focus state
+    wasFocusedRef.current = isFocused;
+  }, [isFocused, messages.length, startNewConversation, setHasMessages]);
 
   const handlePatternComplete = async (pattern: number[]) => {
     // Check if the pattern matches
