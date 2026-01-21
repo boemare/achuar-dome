@@ -73,10 +73,11 @@ export async function sendMessage(
   try {
     // Convert chat messages to Gemini format
     // Gemini uses "parts" with "text" content and "model" instead of "assistant"
-    const conversationHistory = previousMessages.map((m) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    }));
+    const conversationHistory: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> =
+      previousMessages.map((m) => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }));
 
     // Build contents array - Gemini expects alternating user/model messages
     let contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];

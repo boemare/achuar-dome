@@ -87,10 +87,15 @@ const LEADER_PATTERN = [0, 3, 6, 7, 8];
 export default function ChatScreen() {
   const { user, isElder, login, isReady } = useAuth();
   const { setHasMessages } = useChatContext();
-  const { messages, loading, sending, send, startNewConversation, addUserMessage } = useChat(
-    user?.id,
-    isReady
-  );
+  const {
+    messages,
+    loading,
+    sending,
+    send,
+    startNewConversation,
+    addUserMessage,
+    conversationId,
+  } = useChat(user?.id, isReady);
   const flatListRef = useRef<FlatList>(null);
   const insets = useSafeAreaInsets();
   const [showPatternLock, setShowPatternLock] = useState(false);
@@ -145,37 +150,54 @@ export default function ChatScreen() {
   };
 
   const handleAttachPress = async () => {
-    if (!user?.id) {
-      Alert.alert('Sign in required', 'Please sign in to upload images.');
-      return;
+    try {
+      if (!user?.id) {
+        Alert.alert('Sign in required', 'Please sign in to upload images.');
+        return;
+      }
+
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Allow photo access to upload images.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        // Use new MediaType API to avoid deprecation warnings
+        mediaTypes: ['images'] as any,
+        quality: 0.8,
+      });
+
+      if (result.canceled || !result.assets?.length) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      const response = await fetch(asset.uri);
+      const blob = await response.blob();
+
+      const uploaded = await uploadMedia(blob, 'photo', { userId: user.id });
+      if (!uploaded) {
+        Alert.alert('Upload failed', 'Please try again.');
+        return;
+      }
+
+      // Ensure we have a conversation to attach the message to
+      let targetConversationId = conversationId;
+      if (!targetConversationId) {
+        targetConversationId = await startNewConversation();
+      }
+
+      if (!targetConversationId) {
+        Alert.alert('Chat not ready', 'Please try again in a moment.');
+        return;
+      }
+
+      await addUserMessage(`📷 Photo uploaded: ${uploaded.url}`, targetConversationId);
+    } catch (error) {
+      console.error('Image upload error:', error);
+      Alert.alert('Upload error', 'Something went wrong while uploading the image.');
     }
-
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow photo access to upload images.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-    });
-
-    if (result.canceled || !result.assets?.length) {
-      return;
-    }
-
-    const asset = result.assets[0];
-    const response = await fetch(asset.uri);
-    const blob = await response.blob();
-
-    const uploaded = await uploadMedia(blob, 'photo', { userId: user.id });
-    if (!uploaded) {
-      Alert.alert('Upload failed', 'Please try again.');
-      return;
-    }
-
-    await addUserMessage(`📷 Photo uploaded: ${uploaded.url}`);
   };
 
   const renderMessage = ({ item }: { item: ChatMessage }) => (

@@ -13,8 +13,8 @@ interface UseChatResult {
   sending: boolean;
   conversationId: string | null;
   send: (content: string) => Promise<void>;
-  addUserMessage: (content: string) => Promise<void>;
-  startNewConversation: () => Promise<void>;
+  addUserMessage: (content: string, conversationIdOverride?: string | null) => Promise<void>;
+  startNewConversation: () => Promise<string | null>;
   loadConversation: (id: string) => Promise<void>;
 }
 
@@ -24,7 +24,7 @@ export function useChat(userId?: string, isReady: boolean = false): UseChatResul
   const [sending, setSending] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
 
-  const startNewConversation = useCallback(async () => {
+  const startNewConversation = useCallback(async (): Promise<string | null> => {
     if (!userId) return;
 
     setLoading(true);
@@ -34,6 +34,7 @@ export function useChat(userId?: string, isReady: boolean = false): UseChatResul
       setMessages([]);
     }
     setLoading(false);
+    return id || null;
   }, [userId]);
 
   const loadConversation = useCallback(async (id: string) => {
@@ -93,8 +94,9 @@ export function useChat(userId?: string, isReady: boolean = false): UseChatResul
   );
 
   const addUserMessage = useCallback(
-    async (content: string) => {
-      if (!conversationId || !content.trim()) return;
+    async (content: string, conversationIdOverride?: string | null) => {
+      const targetConversationId = conversationIdOverride ?? conversationId;
+      if (!targetConversationId || !content.trim()) return;
 
       // Add user message optimistically
       const userMessage: ChatMessage = {
@@ -106,7 +108,7 @@ export function useChat(userId?: string, isReady: boolean = false): UseChatResul
       setMessages((prev) => [...prev, userMessage]);
 
       // Save user message
-      const savedUserMessage = await saveMessage(conversationId, 'user', content.trim());
+      const savedUserMessage = await saveMessage(targetConversationId, 'user', content.trim());
       if (savedUserMessage) {
         setMessages((prev) =>
           prev.map((m) => (m.id === userMessage.id ? savedUserMessage : m))
