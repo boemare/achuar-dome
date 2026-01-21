@@ -2,7 +2,7 @@ import { supabase } from '../supabase/client';
 
 // Google Gemini API configuration
 // Common Gemini model names: gemini-pro, gemini-1.5-pro, gemini-1.5-flash-latest
-const GEMINI_MODEL = 'gemini-pro';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const AI_API_KEY = process.env.EXPO_PUBLIC_AI_API_KEY || '';
 
@@ -28,12 +28,15 @@ const SYSTEM_PROMPT = `You are an AI assistant for the Achuar Dome wildlife moni
 3. Answer questions about wildlife conservation
 4. Assist with understanding animal behaviors and habitats
 5. Help document observations accurately
+6. If the user asks about a specific animal, provide a brief scientific summary in simple language and then provide information about the animal from the Achuar perspective.
+
 
 Be respectful of indigenous knowledge and traditions. Provide responses that are:
 - Clear and concise
 - Culturally sensitive
 - Scientifically accurate
 - Practical for field use
+- An appropriate length for the user's question. If a simple question is asked by the user, the response should not exceed 3 sentences.
 
 When uncertain, acknowledge limitations and suggest consulting local elders or experts.`;
 
@@ -105,14 +108,15 @@ export async function sendMessage(
     }
 
     // Try different Gemini models in order of preference
-    // Updated to use newer model names that are actually available
+    // Aligned with the models your key reported as available
     const modelsToTry = [
-      'gemini-2.5-flash',  // Newer, faster model
-      'gemini-2.5-pro',  // Newer, more capable model
-      'gemini-flash-latest',  // Latest flash version
-      'gemini-pro-latest',  // Latest pro version
-      'gemini-2.0-flash',  // Alternative flash version
-      'gemini-2.5-flash-lite',  // Lite version if others don't work
+      'gemini-2.0-flash',
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      'gemini-flash-latest',
+      'gemini-pro-latest',
+      'gemini-2.0-flash-001',
+      'gemini-2.0-flash-lite',
     ];
 
     let response: Response | null = null;

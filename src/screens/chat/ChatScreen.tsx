@@ -8,9 +8,13 @@ import {
   TouchableOpacity,
   Dimensions,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import Svg, { Path } from 'react-native-svg';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChatContext } from '../../context/ChatContext';
@@ -20,6 +24,7 @@ import ChatInput from '../../components/chat/ChatInput';
 import PatternLock from '../../components/auth/PatternLock';
 import RecordingModal from '../../components/voice/RecordingModal';
 import { ChatMessage } from '../../services/ai/chat';
+import { uploadMedia } from '../../services/supabase/media';
 import { colors } from '../../constants/colors';
 import { spacing, borderRadius } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
@@ -82,8 +87,12 @@ const LEADER_PATTERN = [0, 3, 6, 7, 8];
 export default function ChatScreen() {
   const { user, isElder, login, isReady } = useAuth();
   const { setHasMessages } = useChatContext();
-  const { messages, loading, sending, send, startNewConversation } = useChat(user?.id, isReady);
+  const { messages, loading, sending, send, startNewConversation, addUserMessage } = useChat(
+    user?.id,
+    isReady
+  );
   const flatListRef = useRef<FlatList>(null);
+  const insets = useSafeAreaInsets();
   const [showPatternLock, setShowPatternLock] = useState(false);
   const [patternError, setPatternError] = useState(false);
   const [showRecordingModal, setShowRecordingModal] = useState(false);
@@ -133,6 +142,40 @@ export default function ChatScreen() {
   const handleRecordingComplete = () => {
     setShowRecordingModal(false);
     setRecordingNumber((prev) => prev + 1);
+  };
+
+  const handleAttachPress = async () => {
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'Please sign in to upload images.');
+      return;
+    }
+
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to upload images.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets?.length) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    const response = await fetch(asset.uri);
+    const blob = await response.blob();
+
+    const uploaded = await uploadMedia(blob, 'photo', { userId: user.id });
+    if (!uploaded) {
+      Alert.alert('Upload failed', 'Please try again.');
+      return;
+    }
+
+    await addUserMessage(`📷 Photo uploaded: ${uploaded.url}`);
   };
 
   const renderMessage = ({ item }: { item: ChatMessage }) => (
@@ -236,7 +279,12 @@ export default function ChatScreen() {
 
           {/* Chat input - positioned for keyboard visibility */}
           <View style={styles.welcomeInputSection}>
-            <ChatInput onSend={send} onMicPress={handleMicPress} disabled={sending || loading} />
+        <ChatInput
+          onSend={send}
+          onMicPress={handleMicPress}
+          onAttachPress={handleAttachPress}
+          disabled={sending || loading}
+        />
             <Text style={styles.welcomeHint}>
               Ask about species, behaviors, tracks, or anything about Amazon wildlife
             </Text>
@@ -258,66 +306,83 @@ export default function ChatScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <LeaderModeHeader compact />
-      {hasMessages && (
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <View style={styles.headerDot} />
-            <Text style={styles.headerTitle}>Wildlife Assistant</Text>
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={insets.bottom}
+      >
+        <LeaderModeHeader compact />
+        {hasMessages && (
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              <View style={styles.headerDot} />
+              <Text style={styles.headerTitle}>Wildlife Assistant</Text>
+            </View>
+            <TouchableOpacity
+              onPress={startNewConversation}
+              style={styles.newChatButton}
+              activeOpacity={0.7}
+            >
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M12 5V19M5 12H19"
+                  stroke={colors.primary}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                />
+              </Svg>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            onPress={startNewConversation}
-            style={styles.newChatButton}
-            activeOpacity={0.7}
-          >
-            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-              <Path
-                d="M12 5V19M5 12H19"
-                stroke={colors.primary}
-                strokeWidth={2}
-                strokeLinecap="round"
-              />
-            </Svg>
-          </TouchableOpacity>
-        </View>
-      )}
+        )}
 
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[
-          styles.messageList,
-          !hasMessages && styles.messageListEmpty,
-        ]}
-        ListEmptyComponent={renderEmpty}
-        showsVerticalScrollIndicator={false}
-      />
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[
+            styles.messageList,
+            !hasMessages && styles.messageListEmpty,
+          ]}
+          ListEmptyComponent={renderEmpty}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        />
 
-      {sending && (
-        <View style={styles.typingIndicator}>
-          <View style={styles.typingDots}>
-            <View style={[styles.typingDot, styles.typingDot1]} />
-            <View style={[styles.typingDot, styles.typingDot2]} />
-            <View style={[styles.typingDot, styles.typingDot3]} />
+        {sending && (
+          <View style={styles.typingIndicator}>
+            <View style={styles.typingDots}>
+              <View style={[styles.typingDot, styles.typingDot1]} />
+              <View style={[styles.typingDot, styles.typingDot2]} />
+              <View style={[styles.typingDot, styles.typingDot3]} />
+            </View>
+            <Text style={styles.typingText}>Thinking...</Text>
           </View>
-          <Text style={styles.typingText}>Thinking...</Text>
-        </View>
-      )}
+        )}
 
-      <View style={styles.inputWrapper}>
-        <ChatInput onSend={send} onMicPress={handleMicPress} disabled={sending || loading} />
-      </View>
-      <PatternLockModal />
-      <RecordingModal
-        visible={showRecordingModal}
-        onClose={() => setShowRecordingModal(false)}
-        onRecordingComplete={handleRecordingComplete}
-        userId={user?.id}
-        autoStart={true}
-        recordingNumber={recordingNumber}
-      />
+        <View
+          style={[
+            styles.inputWrapper,
+            { paddingBottom: Math.max(insets.bottom, spacing.sm) },
+          ]}
+        >
+            <ChatInput
+              onSend={send}
+              onMicPress={handleMicPress}
+              onAttachPress={handleAttachPress}
+              disabled={sending || loading}
+            />
+        </View>
+        <PatternLockModal />
+        <RecordingModal
+          visible={showRecordingModal}
+          onClose={() => setShowRecordingModal(false)}
+          onRecordingComplete={handleRecordingComplete}
+          userId={user?.id}
+          autoStart={true}
+          recordingNumber={recordingNumber}
+        />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -547,5 +612,8 @@ const styles = StyleSheet.create({
   },
   inputWrapper: {
     paddingBottom: spacing.sm,
+  },
+  keyboardContainer: {
+    flex: 1,
   },
 });

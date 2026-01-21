@@ -13,6 +13,7 @@ interface UseChatResult {
   sending: boolean;
   conversationId: string | null;
   send: (content: string) => Promise<void>;
+  addUserMessage: (content: string) => Promise<void>;
   startNewConversation: () => Promise<void>;
   loadConversation: (id: string) => Promise<void>;
 }
@@ -91,6 +92,30 @@ export function useChat(userId?: string, isReady: boolean = false): UseChatResul
     [conversationId, messages]
   );
 
+  const addUserMessage = useCallback(
+    async (content: string) => {
+      if (!conversationId || !content.trim()) return;
+
+      // Add user message optimistically
+      const userMessage: ChatMessage = {
+        id: `temp_${Date.now()}`,
+        role: 'user',
+        content: content.trim(),
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMessage]);
+
+      // Save user message
+      const savedUserMessage = await saveMessage(conversationId, 'user', content.trim());
+      if (savedUserMessage) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === userMessage.id ? savedUserMessage : m))
+        );
+      }
+    },
+    [conversationId]
+  );
+
   // Start a new conversation on mount if user is available and ready
   useEffect(() => {
     if (userId && isReady && !conversationId) {
@@ -104,6 +129,7 @@ export function useChat(userId?: string, isReady: boolean = false): UseChatResul
     sending,
     conversationId,
     send,
+    addUserMessage,
     startNewConversation,
     loadConversation,
   };

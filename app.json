@@ -14,7 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.berlanpa.achuar"
+      "bundleIdentifier": "com.berlanpa.achuar",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Allow access to your photos to upload wildlife images."
+      }
     },
     "android": {
       "adaptiveIcon": {

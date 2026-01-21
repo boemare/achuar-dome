@@ -1,12 +1,5 @@
 import React, { useState } from 'react';
-import {
-  View,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { colors } from '../../constants/colors';
 import { spacing, borderRadius } from '../../constants/spacing';
@@ -15,6 +8,7 @@ import { typography } from '../../constants/typography';
 interface ChatInputProps {
   onSend: (message: string) => void;
   onMicPress?: () => void;
+  onAttachPress?: () => void;
   disabled?: boolean;
   placeholder?: string;
 }
@@ -53,9 +47,22 @@ const MicIcon = ({ color = colors.textLight, size = 28 }) => (
   </Svg>
 );
 
+// Plus icon
+const PlusIcon = ({ color = colors.textLight, size = 20 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 5V19M5 12H19"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+    />
+  </Svg>
+);
+
 export default function ChatInput({
   onSend,
   onMicPress,
+  onAttachPress,
   disabled = false,
   placeholder = 'Ask about wildlife...',
 }: ChatInputProps) {
@@ -71,56 +78,65 @@ export default function ChatInput({
   const canSend = text.trim() && !disabled;
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={100}
-    >
-      <View style={styles.container}>
-        <View style={styles.inputWrapper}>
-          <View style={styles.inputContainer}>
-            {/* Mic button */}
-            {onMicPress && (
-              <TouchableOpacity
-                style={styles.micButton}
-                onPress={onMicPress}
-                disabled={disabled}
-                activeOpacity={0.7}
-              >
-                <MicIcon
-                  color={disabled ? colors.textMuted : colors.primary}
-                  size={22}
-                />
-              </TouchableOpacity>
-            )}
-            <TextInput
-              style={[styles.input, onMicPress && styles.inputWithMic]}
-              value={text}
-              onChangeText={setText}
-              placeholder={placeholder}
-              placeholderTextColor={colors.textMuted}
-              multiline
-              maxLength={1000}
-              editable={!disabled}
-              returnKeyType="default"
-            />
+    <View style={styles.container}>
+      <View style={styles.inputWrapper}>
+        <View style={styles.inputContainer}>
+          {/* Attach button */}
+          {onAttachPress && (
             <TouchableOpacity
-              style={[
-                styles.sendButton,
-                canSend && styles.sendButtonActive,
-              ]}
-              onPress={handleSend}
-              disabled={!canSend}
+              style={styles.attachButton}
+              onPress={onAttachPress}
+              disabled={disabled}
               activeOpacity={0.7}
             >
-              <SendIcon
-                color={canSend ? colors.textLight : colors.textMuted}
-                size={20}
+              <PlusIcon
+                color={disabled ? colors.textMuted : colors.primary}
+                size={18}
               />
             </TouchableOpacity>
-          </View>
+          )}
+          {/* Mic button */}
+          {onMicPress && (
+            <TouchableOpacity
+              style={styles.micButton}
+              onPress={onMicPress}
+              disabled={disabled}
+              activeOpacity={0.7}
+            >
+              <MicIcon
+                color={disabled ? colors.textMuted : colors.primary}
+                size={22}
+              />
+            </TouchableOpacity>
+          )}
+          <TextInput
+            style={[styles.input, (onMicPress || onAttachPress) && styles.inputWithAttachments]}
+            value={text}
+            onChangeText={setText}
+            placeholder={placeholder}
+            placeholderTextColor={colors.textMuted}
+            multiline
+            maxLength={1000}
+            editable={!disabled}
+            returnKeyType="default"
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              canSend && styles.sendButtonActive,
+            ]}
+            onPress={handleSend}
+            disabled={!canSend}
+            activeOpacity={0.7}
+          >
+            <SendIcon
+              color={canSend ? colors.textLight : colors.textMuted}
+              size={20}
+            />
+          </TouchableOpacity>
         </View>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -139,16 +155,15 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: 28,
     borderWidth: 2,
     borderColor: colors.primaryMuted,
     minHeight: 60,
     maxHeight: 180,
-    paddingLeft: spacing.lg,
-    paddingRight: spacing.sm,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   input: {
     ...typography.body,
@@ -160,8 +175,16 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 24,
   },
-  inputWithMic: {
+  inputWithAttachments: {
     paddingLeft: spacing.xs,
+  },
+  attachButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
   },
   micButton: {
     width: 52,
@@ -170,7 +193,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
-    marginBottom: 2,
   },
   sendButton: {
     width: 44,
@@ -179,7 +201,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginLeft: spacing.sm,
   },
   sendButtonActive: {
     backgroundColor: colors.primary,
