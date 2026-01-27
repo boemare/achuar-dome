@@ -11,7 +11,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ScrollView,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -81,8 +83,54 @@ const LeaderIcon = ({ color = colors.primary, size = 20 }) => (
   </Svg>
 );
 
+const TrashIcon = ({ color = colors.error, size = 18 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M3 6H21"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M8 6V4C8 3.45 8.45 3 9 3H15C15.55 3 16 3.45 16 4V6"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M6 6L7 20C7 20.55 7.45 21 8 21H16C16.55 21 17 20.55 17 20L18 6"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M10 11V17M14 11V17"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+    />
+  </Svg>
+);
+
 // Test pattern for leader mode: L-shape (0, 3, 6, 7, 8)
 const LEADER_PATTERN = [0, 3, 6, 7, 8];
+
+const LOCAL_HISTORY_KEY = 'chat_history_v1';
+
+type LocalConversation = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: Array<{
+    id: string;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    audioUrl?: string;
+    createdAt: string;
+  }>;
+};
+
 
 export default function ChatScreen() {
   const { user, isElder, login, isReady } = useAuth();
@@ -95,6 +143,8 @@ export default function ChatScreen() {
     startNewConversation,
     addUserMessage,
     conversationId,
+    loadConversation,
+    loadLocalConversation,
   } = useChat(user?.id, isReady);
   const flatListRef = useRef<FlatList>(null);
   const insets = useSafeAreaInsets();
@@ -102,6 +152,8 @@ export default function ChatScreen() {
   const [patternError, setPatternError] = useState(false);
   const [showRecordingModal, setShowRecordingModal] = useState(false);
   const [recordingNumber, setRecordingNumber] = useState(1);
+  const [historyItems, setHistoryItems] = useState<LocalConversation[]>([]);
+  const historyRef = useRef<LocalConversation[]>([]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -112,6 +164,74 @@ export default function ChatScreen() {
     // Update chat context when messages change
     setHasMessages(messages.length > 0);
   }, [messages.length, setHasMessages]);
+
+  const loadLocalHistory = useCallback(async () => {
+    try {
+      const stored = await AsyncStorage.getItem(LOCAL_HISTORY_KEY);
+      if (!stored) {
+        setHistoryItems([]);
+        historyRef.current = [];
+        return;
+      }
+      const parsed: LocalConversation[] = JSON.parse(stored);
+      setHistoryItems(parsed);
+      historyRef.current = parsed;
+    } catch (error) {
+      console.error('Failed to load local chat history:', error);
+    }
+  }, []);
+
+  const saveLocalHistory = useCallback(
+    async (nextHistory: LocalConversation[]) => {
+      setHistoryItems(nextHistory);
+      historyRef.current = nextHistory;
+      await AsyncStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(nextHistory));
+    },
+    []
+  );
+
+  const deleteLocalConversation = useCallback(
+    async (id: string) => {
+      const next = historyRef.current.filter((c) => c.id !== id);
+      await saveLocalHistory(next);
+    },
+    [saveLocalHistory]
+  );
+
+  useEffect(() => {
+    loadLocalHistory();
+  }, [loadLocalHistory]);
+
+  useEffect(() => {
+    if (!conversationId || messages.length === 0) return;
+
+    const firstUserMessage = messages.find((m) => m.role === 'user')?.content || '';
+    const title = firstUserMessage.trim() || 'Conversation';
+
+    const existing = historyRef.current.find((c) => c.id === conversationId);
+    const conversation: LocalConversation = {
+      id: conversationId,
+      title,
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      messages: messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        audioUrl: m.audioUrl,
+        createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : String(m.createdAt),
+      })),
+    };
+
+    const next = [
+      conversation,
+      ...historyRef.current.filter((c) => c.id !== conversationId),
+    ].slice(0, 20);
+
+    saveLocalHistory(next).catch((error) => {
+      console.error('Failed to save local chat history:', error);
+    });
+  }, [conversationId, messages, saveLocalHistory]);
 
   // Track focus state to detect when user navigates away
   const isFocused = useIsFocused();
@@ -148,6 +268,25 @@ export default function ChatScreen() {
     setShowRecordingModal(false);
     setRecordingNumber((prev) => prev + 1);
   };
+
+  const handleSelectConversation = useCallback(
+    async (id: string) => {
+      const selected = historyItems.find((c) => c.id === id);
+      if (!selected) {
+        return;
+      }
+      const localMessages: ChatMessage[] = selected.messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        audioUrl: m.audioUrl,
+        createdAt: new Date(m.createdAt),
+      }));
+
+      loadLocalConversation(id, localMessages);
+    },
+    [historyItems, loadLocalConversation]
+  );
 
   const handleAttachPress = async () => {
     try {
@@ -202,6 +341,28 @@ export default function ChatScreen() {
 
   const renderMessage = ({ item }: { item: ChatMessage }) => (
     <MessageBubble message={item} />
+  );
+
+  const renderHistoryItem = ({ item }: { item: LocalConversation }) => (
+    <View style={styles.historyItem}>
+      <TouchableOpacity
+        style={styles.historyItemContent}
+        onPress={() => handleSelectConversation(item.id)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.historyTitle}>{item.title || 'Conversation'}</Text>
+        <Text style={styles.historyDate}>
+          {new Date(item.updatedAt || item.createdAt).toLocaleString()}
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.historyTrashButton}
+        onPress={() => deleteLocalConversation(item.id)}
+        activeOpacity={0.7}
+      >
+        <TrashIcon />
+      </TouchableOpacity>
+    </View>
   );
 
   const renderEmpty = () => {
@@ -291,7 +452,10 @@ export default function ChatScreen() {
         <LeaderModeHeader />
 
         {/* Main content area */}
-        <View style={styles.welcomeContent}>
+        <ScrollView
+          contentContainerStyle={styles.welcomeContent}
+          showsVerticalScrollIndicator={false}
+        >
           {/* Logo and title section */}
           <View style={styles.welcomeHeader}>
             <ForestLogo size={90} />
@@ -311,7 +475,24 @@ export default function ChatScreen() {
               Ask about species, behaviors, tracks, or anything about Amazon wildlife
             </Text>
           </View>
-        </View>
+
+          {historyItems.length > 0 && (
+            <View style={styles.historyInline}>
+              <Text style={styles.historyInlineTitle}>Chat History</Text>
+              <ScrollView
+                style={styles.historyScroll}
+                contentContainerStyle={styles.historyScrollContent}
+                showsVerticalScrollIndicator={true}
+              >
+                {historyItems.map((item) => (
+                  <View key={item.id} style={styles.historyInlineItem}>
+                    {renderHistoryItem({ item })}
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        </ScrollView>
 
         <PatternLockModal />
         <RecordingModal
@@ -336,7 +517,22 @@ export default function ChatScreen() {
         <LeaderModeHeader compact />
         {hasMessages && (
           <View style={styles.header}>
-            <View style={styles.headerLeft}>
+            <TouchableOpacity
+              onPress={startNewConversation}
+              style={styles.exitButton}
+              activeOpacity={0.7}
+            >
+              <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M15 18L9 12L15 6"
+                  stroke={colors.primary}
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
+            </TouchableOpacity>
+            <View style={styles.headerCenter} pointerEvents="none">
               <View style={styles.headerDot} />
               <Text style={styles.headerTitle}>Wildlife Assistant</Text>
             </View>
@@ -366,9 +562,41 @@ export default function ChatScreen() {
             styles.messageList,
             !hasMessages && styles.messageListEmpty,
           ]}
+          ListHeaderComponent={
+            historyItems.length > 0 && !hasMessages ? (
+              <View style={styles.historyInline}>
+                <Text style={styles.historyInlineTitle}>Chat History</Text>
+                <ScrollView
+                  style={styles.historyScroll}
+                  contentContainerStyle={styles.historyScrollContent}
+                  showsVerticalScrollIndicator={true}
+                >
+                  {historyItems.map((item) => (
+                    <View key={item.id} style={styles.historyInlineItem}>
+                      <TouchableOpacity
+                        style={styles.historyItem}
+                        onPress={() => handleSelectConversation(item.id)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.historyTitle}>
+                          {item.title || 'Conversation'}
+                        </Text>
+                        <Text style={styles.historyDate}>
+                          {new Date(item.updatedAt || item.createdAt).toLocaleString()}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null
+          }
           ListEmptyComponent={renderEmpty}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          alwaysBounceVertical={true}
+          bounces={true}
+          overScrollMode="always"
         />
 
         {sending && (
@@ -438,15 +666,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    position: 'relative',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
   },
-  headerLeft: {
+  headerCenter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.sm,
+  },
+  exitButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.primaryMuted,
   },
   headerDot: {
     width: 8,
@@ -631,6 +874,59 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textMuted,
     fontStyle: 'italic',
+  },
+  historyInline: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  historyInlineTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textMuted,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  historyScroll: {
+    maxHeight: 240,
+  },
+  historyScrollContent: {
+    paddingBottom: spacing.sm,
+  },
+  historyInlineItem: {
+    paddingHorizontal: spacing.md,
+  },
+  historyItem: {
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  historyItemContent: {
+    flex: 1,
+    paddingRight: spacing.sm,
+  },
+  historyTrashButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceElevated,
+  },
+  historyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  historyDate: {
+    fontSize: 12,
+    color: colors.textMuted,
   },
   inputWrapper: {
     paddingBottom: spacing.sm,
