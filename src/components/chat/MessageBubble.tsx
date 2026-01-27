@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import Markdown from 'react-native-markdown-display';
 import { ChatMessage } from '../../services/ai/chat';
 import { colors } from '../../constants/colors';
 import { spacing, borderRadius } from '../../constants/spacing';
@@ -16,9 +17,11 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   return (
     <View style={[styles.container, isUser ? styles.userContainer : styles.assistantContainer]}>
       <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
-        <Text style={[styles.content, isUser ? styles.userContent : styles.assistantContent]}>
+        <Markdown
+          style={isUser ? styles.userMarkdown : styles.assistantMarkdown}
+        >
           {message.content}
-        </Text>
+        </Markdown>
       </View>
       <Text style={[styles.time, isUser ? styles.userTime : styles.assistantTime]}>
         {formatTime(message.createdAt)}
@@ -63,6 +66,26 @@ const styles = StyleSheet.create({
   },
   assistantContent: {
     color: colors.text,
+  },
+  userMarkdown: {
+    body: {
+      ...typography.body,
+      color: colors.textLight,
+    },
+    paragraph: {
+      marginTop: 0,
+      marginBottom: 0,
+    },
+  },
+  assistantMarkdown: {
+    body: {
+      ...typography.body,
+      color: colors.text,
+    },
+    paragraph: {
+      marginTop: 0,
+      marginBottom: 0,
+    },
   },
   time: {
     ...typography.caption,

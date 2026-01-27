@@ -128,19 +128,39 @@ export async function sendMessage(
       currentApiUrl = `${GEMINI_API_BASE}/${model}:generateContent?key=${AI_API_KEY}`;
       
       try {
-        response = await fetch(currentApiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        const requestBody = {
+          contents,
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 500,
           },
-          body: JSON.stringify({
-            contents,
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 500,
-            },
-          }),
-        });
+        };
+
+        // Retry a couple of times on transient network failures
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            response = await fetch(currentApiUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(requestBody),
+            });
+            break;
+          } catch (err) {
+            lastError = err;
+            if (err instanceof TypeError && String(err).includes('Network request failed')) {
+              // Backoff and retry
+              await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+              continue;
+            }
+            throw err;
+          }
+        }
+
+        if (!response) {
+          throw lastError || new Error('Network request failed');
+        }
 
         if (response.ok) {
           console.log(`Successfully using model: ${model}`);
@@ -183,12 +203,21 @@ export async function sendMessage(
       } catch (error) {
         console.error(`Error with model ${model}:`, error);
         lastError = error;
+        if (error instanceof TypeError && String(error).includes('Network request failed')) {
+          // Network failure is not model-specific; stop trying other models
+          break;
+        }
         response = null;
         continue;
       }
     }
 
     if (!response) {
+      if (lastError instanceof TypeError && String(lastError).includes('Network request failed')) {
+        throw new Error(
+          'Network request failed. Please check your internet connection or VPN and try again.'
+        );
+      }
       // Try to list available models for better error message
       console.log('All models failed, checking available models...');
       const availableModels = await listAvailableModels();
@@ -249,6 +278,10 @@ export async function sendMessage(
 }
 
 export async function createConversation(userId: string): Promise<string | null> {
+  if (!userId) {
+    return null;
+  }
+
   const { data, error } = await supabase
     .from('conversations')
     .insert({ user_id: userId })
@@ -257,7 +290,8 @@ export async function createConversation(userId: string): Promise<string | null>
 
   if (error) {
     console.error('Error creating conversation:', error);
-    return null;
+    // Fall back to a local-only conversation id to avoid blocking chat
+    return `local_${Date.now()}`;
   }
 
   return data.id;
@@ -269,6 +303,16 @@ export async function saveMessage(
   content: string,
   audioUrl?: string
 ): Promise<ChatMessage | null> {
+  if (conversationId.startsWith('local_')) {
+    return {
+      id: `local_${Date.now()}`,
+      role,
+      content,
+      audioUrl,
+      createdAt: new Date(),
+    };
+  }
+
   const { data, error } = await supabase
     .from('messages')
     .insert({
@@ -295,6 +339,10 @@ export async function saveMessage(
 }
 
 export async function getConversationMessages(conversationId: string): Promise<ChatMessage[]> {
+  if (conversationId.startsWith('local_')) {
+    return [];
+  }
+
   const { data, error } = await supabase
     .from('messages')
     .select('*')

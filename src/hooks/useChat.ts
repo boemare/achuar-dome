@@ -16,6 +16,7 @@ interface UseChatResult {
   addUserMessage: (content: string, conversationIdOverride?: string | null) => Promise<void>;
   startNewConversation: () => Promise<string | null>;
   loadConversation: (id: string) => Promise<void>;
+  loadLocalConversation: (id: string, localMessages: ChatMessage[]) => void;
 }
 
 export function useChat(userId?: string, isReady: boolean = false): UseChatResult {
@@ -42,6 +43,12 @@ export function useChat(userId?: string, isReady: boolean = false): UseChatResul
     setConversationId(id);
     const loadedMessages = await getConversationMessages(id);
     setMessages(loadedMessages);
+    setLoading(false);
+  }, []);
+
+  const loadLocalConversation = useCallback((id: string, localMessages: ChatMessage[]) => {
+    setConversationId(id);
+    setMessages(localMessages);
     setLoading(false);
   }, []);
 
@@ -134,5 +141,6 @@ export function useChat(userId?: string, isReady: boolean = false): UseChatResul
     addUserMessage,
     startNewConversation,
     loadConversation,
+    loadLocalConversation,
   };
 }
