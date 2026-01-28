@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { MediaItem } from '../../types/media';
 import { colors } from '../../constants/colors';
+import { t } from '../../i18n';
 import { spacing, borderRadius } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { formatDuration } from '../../utils/formatters';
@@ -32,7 +33,7 @@ export default function MediaCard({ item, onPress, size = 120 }: MediaCardProps)
               resizeMode="cover"
             />
             <View style={styles.videoOverlay}>
-              <Text style={styles.playIcon}>Play</Text>
+              <Text style={styles.playIcon}>{t('play')}</Text>
               {item.duration && (
                 <Text style={styles.duration}>{formatDuration(item.duration)}</Text>
               )}
@@ -60,7 +61,11 @@ export default function MediaCard({ item, onPress, size = 120 }: MediaCardProps)
       {renderContent()}
       <View style={styles.typeIndicator}>
         <Text style={styles.typeText}>
-          {item.type === 'photo' ? 'Photo' : item.type === 'video' ? 'Video' : 'Audio'}
+          {item.type === 'photo'
+            ? t('filterPhotos').slice(0, -1)
+            : item.type === 'video'
+            ? t('filterVideos')
+            : t('filterAudio')}
         </Text>
       </View>
     </TouchableOpacity>

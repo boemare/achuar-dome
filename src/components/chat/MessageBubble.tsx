@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import { ChatMessage } from '../../services/ai/chat';
 import { colors } from '../../constants/colors';
@@ -13,14 +13,30 @@ interface MessageBubbleProps {
 
 export default function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
+  const urlMatch = message.content.match(/https?:\/\/\S+|file:\/\/\S+|content:\/\/\S+/i);
+  const imageUrl = urlMatch?.[0] || null;
+  const [imageError, setImageError] = useState(false);
+  const displayText = imageUrl
+    ? message.content.replace(imageUrl, '').replace(/\s+/g, ' ').trim()
+    : message.content;
+
+  const bubbleStyle = imageUrl ? styles.imageBubble : isUser ? styles.userBubble : styles.assistantBubble;
 
   return (
     <View style={[styles.container, isUser ? styles.userContainer : styles.assistantContainer]}>
-      <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
+      <View style={[styles.bubble, bubbleStyle]}>
+        {imageUrl && !imageError && (
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.image}
+            resizeMode="cover"
+            onError={() => setImageError(true)}
+          />
+        )}
         <Markdown
           style={isUser ? styles.userMarkdown : styles.assistantMarkdown}
         >
-          {message.content}
+          {displayText}
         </Markdown>
       </View>
       <Text style={[styles.time, isUser ? styles.userTime : styles.assistantTime]}>
@@ -58,6 +74,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderLight,
   },
+  imageBubble: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
   content: {
     ...typography.body,
   },
@@ -86,6 +108,13 @@ const styles = StyleSheet.create({
       marginTop: 0,
       marginBottom: 0,
     },
+  },
+  image: {
+    width: 220,
+    height: 160,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.borderLight,
   },
   time: {
     ...typography.caption,

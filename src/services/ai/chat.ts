@@ -1,10 +1,12 @@
 import { supabase } from '../supabase/client';
+import * as FileSystem from 'expo-file-system/legacy';
 
 // Google Gemini API configuration
 // Common Gemini model names: gemini-pro, gemini-1.5-pro, gemini-1.5-flash-latest
 const GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const AI_API_KEY = process.env.EXPO_PUBLIC_AI_API_KEY || '';
+
 
 export interface ChatMessage {
   id: string;
@@ -21,24 +23,25 @@ export interface Conversation {
   createdAt: Date;
 }
 
-const SYSTEM_PROMPT = `You are an AI assistant for the Achuar Dome wildlife monitoring app, used by the Achuar community in the Ecuadorian Amazon. Your role is to:
+const SYSTEM_PROMPT = `Eres un asistente de IA para la app Achuar Dome, usada por el pueblo Achuar en la Amazonía ecuatoriana. Responde SIEMPRE en español.
 
-1. Help identify wildlife species based on descriptions
-2. Provide information about local flora and fauna
-3. Answer questions about wildlife conservation
-4. Assist with understanding animal behaviors and habitats
-5. Help document observations accurately
-6. If the user asks about a specific animal, provide a brief scientific summary in simple language and then provide information about the animal from the Achuar perspective.
+Tu rol es:
+1. Ayudar a identificar especies a partir de descripciones.
+2. Dar información sobre flora y fauna local.
+3. Responder preguntas sobre conservación de vida silvestre.
+4. Ayudar a entender comportamientos y hábitats de animales.
+5. Ayudar a documentar observaciones con precisión.
+6. Si el usuario pregunta por un animal específico, primero da un resumen científico breve y sencillo, y luego aporta información desde la perspectiva Achuar.
 
+Lineamientos:
+- Respeta el conocimiento y las tradiciones indígenas.
+- Sé claro, conciso y culturalmente sensible.
+- Sé científicamente correcto pero con lenguaje sencillo.
+- Mantén una longitud adecuada: si la pregunta es simple, no excedas 3 oraciones.
 
-Be respectful of indigenous knowledge and traditions. Provide responses that are:
-- Clear and concise
-- Culturally sensitive
-- Scientifically accurate
-- Practical for field use
-- An appropriate length for the user's question. If a simple question is asked by the user, the response should not exceed 3 sentences.
+Cuando no estés seguro, reconoce la limitación y sugiere consultar a personas mayores o expertas.
 
-When uncertain, acknowledge limitations and suggest consulting local elders or experts.`;
+Si se adjunta una imagen, asume que puedes verla y úsala para identificar la especie. No pidas que el usuario describa la foto a menos que la imagen sea borrosa o insuficiente.`;
 
 // Helper function to list available models (for debugging)
 async function listAvailableModels(): Promise<string[]> {
@@ -56,10 +59,57 @@ async function listAvailableModels(): Promise<string[]> {
   return [];
 }
 
+function extractPhotoUrl(text: string): string | null {
+  const match = text.match(/https?:\/\/\S+|file:\/\/\S+|content:\/\/\S+/i);
+  return match ? match[0] : null;
+}
+
+async function fetchImageAsBase64(
+  url: string
+): Promise<{ data: string; mimeType: string } | null> {
+  try {
+    const fs = FileSystem as any;
+    const isLocal = url.startsWith('file://') || url.startsWith('content://');
+    const extension = url.split('?')[0].split('.').pop()?.toLowerCase() || '';
+    const mimeType =
+      extension === 'png'
+        ? 'image/png'
+        : extension === 'webp'
+        ? 'image/webp'
+        : extension === 'heic'
+        ? 'image/heic'
+        : 'image/jpeg';
+
+    if (isLocal) {
+      const base64 = await fs.readAsStringAsync(url, { encoding: 'base64' });
+      return { data: base64, mimeType };
+    }
+
+    const filename = `photo_${Date.now()}`;
+    const cacheDir = fs.cacheDirectory || fs.documentDirectory || '';
+    const download = await fs.downloadAsync(url, `${cacheDir}${filename}`);
+    if (download.status !== 200) {
+      return null;
+    }
+    const base64 = await fs.readAsStringAsync(download.uri, {
+      encoding: 'base64',
+    });
+    const contentType =
+      download.headers?.['Content-Type'] ||
+      download.headers?.['content-type'] ||
+      mimeType;
+    return { data: base64, mimeType: contentType };
+  } catch (error) {
+    console.error('Failed to fetch image for species ID:', error);
+    return null;
+  }
+}
+
 export async function sendMessage(
   conversationId: string,
   userMessage: string,
-  previousMessages: ChatMessage[]
+  previousMessages: ChatMessage[],
+  imageUrl?: string | null
 ): Promise<string> {
   if (!AI_API_KEY) {
     return "AI service not configured. Please add EXPO_PUBLIC_AI_API_KEY to your .env file with your Google Gemini API key.";
@@ -71,22 +121,45 @@ export async function sendMessage(
   }
 
   try {
+    const photoUrl = imageUrl || extractPhotoUrl(userMessage);
+    const imageData = photoUrl ? await fetchImageAsBase64(photoUrl) : null;
+    const cleanedUserText = photoUrl
+      ? userMessage.replace(photoUrl, '').replace(/\s+/g, ' ').trim()
+      : userMessage.trim();
+    const augmentedUserMessage = cleanedUserText || 'El usuario envió una foto.';
+    const imageInstruction = imageData
+      ? "Si hay imagen, inicia la respuesta con 'Identificación: <especie>' en la primera línea."
+      : '';
     // Convert chat messages to Gemini format
     // Gemini uses "parts" with "text" content and "model" instead of "assistant"
-    const conversationHistory: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> =
-      previousMessages.map((m) => ({
+    const conversationHistory: Array<{
+      role: 'user' | 'model';
+      parts: Array<{ text?: string; inlineData?: { data: string; mimeType: string } }>;
+    }> = previousMessages.map((m) => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }],
       }));
 
     // Build contents array - Gemini expects alternating user/model messages
-    let contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+    let contents: Array<{
+      role: 'user' | 'model';
+      parts: Array<{ text?: string; inlineData?: { data: string; mimeType: string } }>;
+    }> = [];
+
+    const userParts = [
+      {
+        text: `${SYSTEM_PROMPT}\n${imageInstruction}\n\nUser: ${augmentedUserMessage}`,
+      },
+      ...(imageData
+        ? [{ inlineData: { data: imageData.data, mimeType: imageData.mimeType } }]
+        : []),
+    ];
 
     // Add system prompt as first user message with instructions
     if (previousMessages.length === 0) {
       contents.push({
         role: 'user',
-        parts: [{ text: `${SYSTEM_PROMPT}\n\nUser: ${userMessage}` }],
+        parts: userParts,
       });
     } else {
       // Create a copy of conversation history to avoid mutation
@@ -102,9 +175,17 @@ export async function sendMessage(
       });
       
       // Add current user message
+      const currentUserParts = [
+        {
+          text: `${SYSTEM_PROMPT}\n${imageInstruction}\n\nUser: ${augmentedUserMessage}`,
+        },
+        ...(imageData
+          ? [{ inlineData: { data: imageData.data, mimeType: imageData.mimeType } }]
+          : []),
+      ];
       contents.push({
         role: 'user',
-        parts: [{ text: userMessage }],
+        parts: currentUserParts,
       });
     }
 

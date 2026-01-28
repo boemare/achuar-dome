@@ -7,16 +7,17 @@ import MediaGrid from '../../components/gallery/MediaGrid';
 import { useMedia } from '../../hooks/useMedia';
 import { MediaItem, MediaType } from '../../types/media';
 import { colors } from '../../constants/colors';
+import { t } from '../../i18n';
 import { spacing, borderRadius } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 
 type FilterType = 'all' | MediaType;
 
 const FILTERS: { key: FilterType; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'photo', label: 'Photos' },
-  { key: 'video', label: 'Videos' },
-  { key: 'audio', label: 'Audio' },
+  { key: 'all', label: t('filterAll') },
+  { key: 'photo', label: t('filterPhotos') },
+  { key: 'video', label: t('filterVideos') },
+  { key: 'audio', label: t('filterAudio') },
 ];
 
 export default function GalleryScreen() {
@@ -36,7 +37,7 @@ export default function GalleryScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Gallery</Text>
+        <Text style={styles.title}>{t('galleryTitle')}</Text>
       </View>
 
       <View style={styles.filterContainer}>

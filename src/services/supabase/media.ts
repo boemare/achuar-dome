@@ -38,6 +38,17 @@ function getPublicUrl(path: string): string {
   return data.publicUrl;
 }
 
+async function getSignedUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .createSignedUrl(path, 60 * 60 * 24);
+  if (error) {
+    console.error('Error creating signed URL:', error);
+    return null;
+  }
+  return data.signedUrl || null;
+}
+
 function photoToMediaItem(photo: PhotoRecord): MediaItem {
   return {
     id: photo.id,
@@ -257,7 +268,23 @@ export async function uploadMedia(
     return null;
   }
 
-  return fetchMediaById(data.id, type);
+  const mediaItem = await fetchMediaById(data.id, type);
+  if (!mediaItem) return null;
+
+  // Prefer signed URL so uploads work even when bucket is private.
+  const signedUrl = await getSignedUrl(path);
+  if (signedUrl) {
+    mediaItem.url = signedUrl;
+  }
+
+  if (mediaItem.thumbnailUrl && record.thumbnail_path) {
+    const signedThumb = await getSignedUrl(record.thumbnail_path);
+    if (signedThumb) {
+      mediaItem.thumbnailUrl = signedThumb;
+    }
+  }
+
+  return mediaItem;
 }
 
 export async function deleteMedia(id: string, type: MediaType): Promise<boolean> {

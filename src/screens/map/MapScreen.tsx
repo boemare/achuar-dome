@@ -18,6 +18,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useObservations } from '../../hooks/useObservations';
 import { ObservationWithMedia } from '../../services/supabase/observations';
 import { colors } from '../../constants/colors';
+import { t } from '../../i18n';
 import { spacing, borderRadius } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { formatDateTime } from '../../utils/formatters';
@@ -162,7 +163,7 @@ export default function MapScreen() {
             </Text>
           </View>
           <TouchableOpacity onPress={clearSelection} style={styles.closeButton}>
-            <Text style={styles.closeText}>X</Text>
+            <Text style={styles.closeText}>{t('close')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -200,7 +201,9 @@ export default function MapScreen() {
         {obs.voiceUrls.length > 0 && (
           <View style={styles.audioIndicator}>
             <Text style={styles.audioIcon}>Audio</Text>
-            <Text style={styles.audioText}>{obs.voiceUrls.length} recording(s)</Text>
+            <Text style={styles.audioText}>
+              {t('recordingsCount', obs.voiceUrls.length)}
+            </Text>
           </View>
         )}
       </View>
@@ -225,21 +228,21 @@ export default function MapScreen() {
 
       <SafeAreaView style={styles.overlay} edges={['top']} pointerEvents="box-none">
         <View style={styles.header} pointerEvents="auto">
-          <Text style={styles.title}>Observations</Text>
+          <Text style={styles.title}>{t('mapObservations')}</Text>
           <View style={styles.legend}>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
-              <Text style={styles.legendText}>Wildlife</Text>
+              <Text style={styles.legendText}>{t('mapWildlife')}</Text>
             </View>
             {isElder && (
               <>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: colors.warning }]} />
-                  <Text style={styles.legendText}>Boat</Text>
+                  <Text style={styles.legendText}>{t('mapBoat')}</Text>
                 </View>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: colors.error }]} />
-                  <Text style={styles.legendText}>Human</Text>
+                  <Text style={styles.legendText}>{t('mapHuman')}</Text>
                 </View>
               </>
             )}
@@ -256,7 +259,7 @@ export default function MapScreen() {
       {renderDetailCard()}
 
       <TouchableOpacity style={styles.refreshButton} onPress={refresh} activeOpacity={0.8}>
-        <Text style={styles.refreshText}>Refresh</Text>
+        <Text style={styles.refreshText}>{t('refresh')}</Text>
       </TouchableOpacity>
 
       {/* Edge swipe zone for navigation to Chat */}

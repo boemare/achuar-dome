@@ -14,6 +14,7 @@ import { Audio } from 'expo-av';
 import { fetchMediaById } from '../../services/supabase/media';
 import { MediaItem, MediaType } from '../../types/media';
 import { colors } from '../../constants/colors';
+import { t } from '../../i18n';
 import { spacing, borderRadius } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { formatDateTime, formatDuration } from '../../utils/formatters';
@@ -90,7 +91,7 @@ export default function MediaDetailScreen() {
     if (!media) {
       return (
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Media not found</Text>
+          <Text style={styles.errorText}>{t('mediaNotFound')}</Text>
         </View>
       );
     }
@@ -113,8 +114,8 @@ export default function MediaDetailScreen() {
               resizeMode="contain"
             />
             <View style={styles.videoOverlay}>
-              <Text style={styles.videoPlayIcon}>Play</Text>
-              <Text style={styles.videoNote}>Video playback coming soon</Text>
+              <Text style={styles.videoPlayIcon}>{t('play')}</Text>
+              <Text style={styles.videoNote}>{t('videoComingSoon')}</Text>
             </View>
           </View>
         );
@@ -130,12 +131,12 @@ export default function MediaDetailScreen() {
               activeOpacity={0.8}
             >
               <Text style={styles.playButtonText}>
-                {isPlaying ? 'Pause' : 'Play'}
+                {isPlaying ? t('pause') : t('play')}
               </Text>
             </TouchableOpacity>
             {media.duration && (
               <Text style={styles.durationText}>
-                Duration: {formatDuration(media.duration)}
+                {t('durationLabel')}: {formatDuration(media.duration)}
               </Text>
             )}
           </View>

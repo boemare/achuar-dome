@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../constants/colors';
+import { t } from '../../i18n';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { RootStackParamList } from '../../navigation/types';
@@ -27,8 +28,8 @@ export default function WelcomeScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Achuar Dome</Text>
-          <Text style={styles.subtitle}>Wildlife Monitoring</Text>
+          <Text style={styles.title}>{t('appTitle')}</Text>
+          <Text style={styles.subtitle}>{t('appSubtitle')}</Text>
         </View>
 
         <View style={styles.buttonContainer}>
@@ -37,8 +38,8 @@ export default function WelcomeScreen() {
             onPress={handleGeneralLogin}
             activeOpacity={0.8}
           >
-            <Text style={styles.buttonText}>General</Text>
-            <Text style={styles.buttonSubtext}>Community Access</Text>
+            <Text style={styles.buttonText}>{t('accessGeneral')}</Text>
+            <Text style={styles.buttonSubtext}>{t('accessCommunity')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -46,8 +47,8 @@ export default function WelcomeScreen() {
             onPress={handleElderLogin}
             activeOpacity={0.8}
           >
-            <Text style={styles.buttonText}>Elder</Text>
-            <Text style={styles.buttonSubtext}>Full Access</Text>
+            <Text style={styles.buttonText}>{t('accessLeader')}</Text>
+            <Text style={styles.buttonSubtext}>{t('accessFull')}</Text>
           </TouchableOpacity>
         </View>
       </View>

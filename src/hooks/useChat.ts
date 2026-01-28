@@ -12,7 +12,7 @@ interface UseChatResult {
   loading: boolean;
   sending: boolean;
   conversationId: string | null;
-  send: (content: string) => Promise<void>;
+  send: (content: string, imageUrl?: string | null) => Promise<void>;
   addUserMessage: (content: string, conversationIdOverride?: string | null) => Promise<void>;
   startNewConversation: () => Promise<string | null>;
   loadConversation: (id: string) => Promise<void>;
@@ -53,7 +53,7 @@ export function useChat(userId?: string, isReady: boolean = false): UseChatResul
   }, []);
 
   const send = useCallback(
-    async (content: string) => {
+    async (content: string, imageUrl?: string | null) => {
       if (!conversationId || !content.trim()) return;
 
       setSending(true);
@@ -76,7 +76,7 @@ export function useChat(userId?: string, isReady: boolean = false): UseChatResul
       }
 
       // Get AI response
-      const aiResponse = await sendMessage(conversationId, content.trim(), messages);
+      const aiResponse = await sendMessage(conversationId, content.trim(), messages, imageUrl);
 
       // Add AI response
       const assistantMessage: ChatMessage = {

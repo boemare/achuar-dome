@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import PatternLock from '../../components/auth/PatternLock';
 import { colors } from '../../constants/colors';
+import { t } from '../../i18n';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 
@@ -27,10 +28,10 @@ export default function PatternLockScreen() {
       login('elder');
     } else {
       setAttempts((prev) => prev + 1);
-      setError(`Incorrect pattern. ${3 - attempts - 1} attempts remaining.`);
+      setError(t('incorrectPattern', 3 - attempts - 1));
 
       if (attempts >= 2) {
-        setError('Too many attempts. Please try again later.');
+        setError(t('tooManyAttempts'));
       }
 
       setTimeout(() => setError(null), 2000);
@@ -44,8 +45,8 @@ export default function PatternLockScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Elder Access</Text>
-        <Text style={styles.subtitle}>Draw your pattern to unlock</Text>
+        <Text style={styles.title}>{t('leaderAccess')}</Text>
+        <Text style={styles.subtitle}>{t('patternSubtitle')}</Text>
 
         <View style={styles.patternContainer}>
           <PatternLock
@@ -56,16 +57,14 @@ export default function PatternLockScreen() {
 
         {error && <Text style={styles.errorText}>{error}</Text>}
 
-        <Text style={styles.hint}>
-          Hint: Draw an L shape starting from top-left
-        </Text>
+        <Text style={styles.hint}>{t('patternHint')}</Text>
 
         <TouchableOpacity
           style={styles.backButton}
           onPress={handleBack}
           activeOpacity={0.8}
         >
-          <Text style={styles.backButtonText}>Back</Text>
+          <Text style={styles.backButtonText}>{t('back')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

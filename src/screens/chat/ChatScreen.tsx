@@ -28,6 +28,7 @@ import RecordingModal from '../../components/voice/RecordingModal';
 import { ChatMessage } from '../../services/ai/chat';
 import { uploadMedia } from '../../services/supabase/media';
 import { colors } from '../../constants/colors';
+import { t } from '../../i18n';
 import { spacing, borderRadius } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 
@@ -206,7 +207,17 @@ export default function ChatScreen() {
     if (!conversationId || messages.length === 0) return;
 
     const firstUserMessage = messages.find((m) => m.role === 'user')?.content || '';
-    const title = firstUserMessage.trim() || 'Conversation';
+    const isPhotoMessage =
+      /file:\/\/\S+|content:\/\/\S+/i.test(firstUserMessage) ||
+      /https?:\/\/\S+\.(png|jpe?g|webp|heic|gif)\b/i.test(firstUserMessage);
+    const assistantMessage = messages.find((m) => m.role === 'assistant')?.content || '';
+    const match = assistantMessage.match(/Identificaci[oó]n:\s*([^\n\.]+)/i);
+    const identifiedName = match?.[1]?.trim();
+    const title = isPhotoMessage
+      ? identifiedName
+        ? t('photoTitleWithName', identifiedName)
+        : t('photoTitle')
+      : firstUserMessage.trim() || t('conversationFallback');
 
     const existing = historyRef.current.find((c) => c.id === conversationId);
     const conversation: LocalConversation = {
@@ -291,13 +302,13 @@ export default function ChatScreen() {
   const handleAttachPress = async () => {
     try {
       if (!user?.id) {
-        Alert.alert('Sign in required', 'Please sign in to upload images.');
+      Alert.alert(t('signInRequiredTitle'), t('signInRequiredBody'));
         return;
       }
 
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Allow photo access to upload images.');
+      Alert.alert(t('permissionNeededTitle'), t('permissionNeededBody'));
         return;
       }
 
@@ -312,14 +323,6 @@ export default function ChatScreen() {
       }
 
       const asset = result.assets[0];
-      const response = await fetch(asset.uri);
-      const blob = await response.blob();
-
-      const uploaded = await uploadMedia(blob, 'photo', { userId: user.id });
-      if (!uploaded) {
-        Alert.alert('Upload failed', 'Please try again.');
-        return;
-      }
 
       // Ensure we have a conversation to attach the message to
       let targetConversationId = conversationId;
@@ -328,14 +331,26 @@ export default function ChatScreen() {
       }
 
       if (!targetConversationId) {
-        Alert.alert('Chat not ready', 'Please try again in a moment.');
+        Alert.alert(t('chatNotReady'), t('tryAgainSoon'));
         return;
       }
 
-      await addUserMessage(`📷 Photo uploaded: ${uploaded.url}`, targetConversationId);
+      // Show the local image immediately in chat
+      await addUserMessage(asset.uri, targetConversationId);
+
+      const response = await fetch(asset.uri);
+      const blob = await response.blob();
+
+      const uploaded = await uploadMedia(blob, 'photo', { userId: user.id });
+      if (!uploaded) {
+        Alert.alert(t('uploadFailedTitle'), t('uploadFailedBody'));
+        return;
+      }
+      // Trigger AI response with the local photo URI attached
+      await send(t('identifyPhotoPrompt'), asset.uri);
     } catch (error) {
       console.error('Image upload error:', error);
-      Alert.alert('Upload error', 'Something went wrong while uploading the image.');
+      Alert.alert(t('uploadFailedTitle'), t('uploadErrorBody'));
     }
   };
 
@@ -350,7 +365,7 @@ export default function ChatScreen() {
         onPress={() => handleSelectConversation(item.id)}
         activeOpacity={0.7}
       >
-        <Text style={styles.historyTitle}>{item.title || 'Conversation'}</Text>
+    <Text style={styles.historyTitle}>{item.title || t('conversationFallback')}</Text>
         <Text style={styles.historyDate}>
           {new Date(item.updatedAt || item.createdAt).toLocaleString()}
         </Text>
@@ -370,7 +385,7 @@ export default function ChatScreen() {
       return (
         <View style={styles.emptyContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Starting conversation...</Text>
+          <Text style={styles.loadingText}>{t('startingConversation')}</Text>
         </View>
       );
     }
@@ -398,7 +413,7 @@ export default function ChatScreen() {
           isElder && styles.leaderButtonTextActive,
           compact && styles.leaderButtonTextCompact,
         ]}>
-          {isElder ? 'Leader Mode Active' : 'Activate Leader Mode'}
+          {isElder ? t('leaderModeActive') : t('activateLeaderMode')}
         </Text>
       </TouchableOpacity>
     </View>
@@ -459,8 +474,8 @@ export default function ChatScreen() {
           {/* Logo and title section */}
           <View style={styles.welcomeHeader}>
             <ForestLogo size={90} />
-            <Text style={styles.welcomeTitle}>Achuar Wildlife</Text>
-            <Text style={styles.welcomeSubtitle}>Your rainforest companion</Text>
+            <Text style={styles.welcomeTitle}>Fauna Achuar</Text>
+            <Text style={styles.welcomeSubtitle}>{t('rainforestCompanion')}</Text>
           </View>
 
           {/* Chat input - positioned for keyboard visibility */}
@@ -472,13 +487,13 @@ export default function ChatScreen() {
           disabled={sending || loading}
         />
             <Text style={styles.welcomeHint}>
-              Ask about species, behaviors, tracks, or anything about Amazon wildlife
+              {t('askAboutAmazon')}
             </Text>
           </View>
 
           {historyItems.length > 0 && (
             <View style={styles.historyInline}>
-              <Text style={styles.historyInlineTitle}>Chat History</Text>
+              <Text style={styles.historyInlineTitle}>{t('chatHistory')}</Text>
               <ScrollView
                 style={styles.historyScroll}
                 contentContainerStyle={styles.historyScrollContent}
@@ -534,7 +549,7 @@ export default function ChatScreen() {
             </TouchableOpacity>
             <View style={styles.headerCenter} pointerEvents="none">
               <View style={styles.headerDot} />
-              <Text style={styles.headerTitle}>Wildlife Assistant</Text>
+              <Text style={styles.headerTitle}>{t('assistantTitle')}</Text>
             </View>
             <TouchableOpacity
               onPress={startNewConversation}
@@ -565,7 +580,7 @@ export default function ChatScreen() {
           ListHeaderComponent={
             historyItems.length > 0 && !hasMessages ? (
               <View style={styles.historyInline}>
-                <Text style={styles.historyInlineTitle}>Chat History</Text>
+              <Text style={styles.historyInlineTitle}>{t('chatHistory')}</Text>
                 <ScrollView
                   style={styles.historyScroll}
                   contentContainerStyle={styles.historyScrollContent}
@@ -579,7 +594,7 @@ export default function ChatScreen() {
                         activeOpacity={0.7}
                       >
                         <Text style={styles.historyTitle}>
-                          {item.title || 'Conversation'}
+                          {item.title || t('conversationFallback')}
                         </Text>
                         <Text style={styles.historyDate}>
                           {new Date(item.updatedAt || item.createdAt).toLocaleString()}
@@ -606,7 +621,7 @@ export default function ChatScreen() {
               <View style={[styles.typingDot, styles.typingDot2]} />
               <View style={[styles.typingDot, styles.typingDot3]} />
             </View>
-            <Text style={styles.typingText}>Thinking...</Text>
+          <Text style={styles.typingText}>{t('thinking')}</Text>
           </View>
         )}
 

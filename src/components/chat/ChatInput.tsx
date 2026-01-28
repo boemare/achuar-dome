@@ -4,6 +4,7 @@ import Svg, { Path } from 'react-native-svg';
 import { colors } from '../../constants/colors';
 import { spacing, borderRadius } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
+import { t } from '../../i18n';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -64,7 +65,7 @@ export default function ChatInput({
   onMicPress,
   onAttachPress,
   disabled = false,
-  placeholder = 'Ask about wildlife...',
+  placeholder = t('askAboutWildlife'),
 }: ChatInputProps) {
   const [text, setText] = useState('');
 
