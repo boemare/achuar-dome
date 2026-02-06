@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useImperativeHandle, forwardRef, useRef } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,14 +6,24 @@ import {
   Modal,
   TouchableOpacity,
   Dimensions,
+  ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRecording } from '../../hooks/useRecording';
 import { uploadMedia } from '../../services/supabase/media';
+import { transcribeAudio } from '../../services/ai/transcribe';
 import { colors } from '../../constants/colors';
 
+// Try to load native speech recognition; falls back to null in Expo Go
+let SpeechModule: any = null;
+try {
+  SpeechModule = require('expo-speech-recognition').ExpoSpeechRecognitionModule;
+} catch {
+  // Native module not available — will fall back to Gemini transcription
+}
+
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-// Calculate bars to fill screen width with padding
 const BAR_WIDTH = 2;
 const BAR_GAP = 2;
 const WAVEFORM_PADDING = 16;
@@ -25,6 +35,7 @@ interface RecordingModalProps {
   onClose: () => void;
   onRecordingComplete: () => void;
   onRecordingStateChange?: (isRecording: boolean) => void;
+  onTranscription?: (text: string) => void;
   userId?: string;
   autoStart?: boolean;
   recordingNumber?: number;
@@ -35,24 +46,25 @@ export interface RecordingModalRef {
   stopAndClose: () => void;
 }
 
-// Format duration as MM:SS.CC
 function formatDurationWithCentiseconds(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   const centiseconds = Math.floor((ms % 1000) / 10);
-
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
 }
 
-// Convert dB level (-160 to 0) to normalized value (0 to 1)
 function normalizeLevel(db: number): number {
-  // Typical speech is around -20 to -10 dB
-  // Silence is around -160 dB
   const minDb = -60;
   const maxDb = 0;
   const normalized = (db - minDb) / (maxDb - minDb);
   return Math.max(0, Math.min(1, normalized));
+}
+
+function normalizeSpeechVolume(volume: number): number {
+  const min = -2;
+  const max = 10;
+  return Math.max(0, Math.min(1, (volume - min) / (max - min)));
 }
 
 const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
@@ -60,11 +72,18 @@ const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
   onClose,
   onRecordingComplete,
   onRecordingStateChange,
+  onTranscription,
   userId,
   autoStart = false,
   recordingNumber = 1,
 }, ref) => {
   const insets = useSafeAreaInsets();
+  const isDictation = !!onTranscription;
+  // Use native speech recognition when available; otherwise fall back to Gemini
+  const useNativeSpeech = isDictation && !!SpeechModule;
+  const useGeminiFallback = isDictation && !SpeechModule;
+
+  // --- Audio recording state (gallery mode + Gemini fallback) ---
   const {
     isRecording,
     durationMs,
@@ -75,58 +94,197 @@ const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
     discard,
   } = useRecording();
 
+  // --- Speech recognition state (native dictation mode) ---
+  const [recognizing, setRecognizing] = useState(false);
+  const [transcript, setTranscript] = useState('');
+  const [dictationDurationMs, setDictationDurationMs] = useState(0);
+  const dictationStartRef = useRef<number | null>(null);
+  const dictationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const transcriptRef = useRef('');
+
+  // --- Gemini fallback state ---
+  const [geminiTranscribing, setGeminiTranscribing] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [hasAutoStarted, setHasAutoStarted] = useState(false);
   const [waveformData, setWaveformData] = useState<number[]>(new Array(WAVEFORM_BARS).fill(0));
   const waveformRef = useRef<number[]>(new Array(WAVEFORM_BARS).fill(0));
 
+  // Determine if actively running
+  const isActive = useNativeSpeech ? recognizing : isRecording;
+  const currentDurationMs = useNativeSpeech ? dictationDurationMs : durationMs;
+
+  // --- Native speech recognition: imperative listeners (avoids hook-at-top-level issue) ---
+  useEffect(() => {
+    if (!SpeechModule || !visible || !isDictation) return;
+
+    const listeners = [
+      SpeechModule.addListener('start', () => setRecognizing(true)),
+      SpeechModule.addListener('end', () => setRecognizing(false)),
+      SpeechModule.addListener('result', (event: any) => {
+        const text = event.results?.[0]?.transcript ?? '';
+        transcriptRef.current = text;
+        setTranscript(text);
+      }),
+      SpeechModule.addListener('error', (event: any) => {
+        console.error('Speech recognition error:', event.error, event.message);
+        if (event.error !== 'no-speech') {
+          setRecognizing(false);
+        }
+      }),
+      SpeechModule.addListener('volumechange', (event: any) => {
+        const normalized = normalizeSpeechVolume(event.value);
+        const newData = [...waveformRef.current.slice(1), normalized];
+        waveformRef.current = newData;
+        setWaveformData(newData);
+      }),
+    ];
+
+    return () => {
+      listeners.forEach((l: any) => l.remove());
+    };
+  }, [visible, isDictation]);
+
   // Notify parent of recording state changes
   useEffect(() => {
-    onRecordingStateChange?.(isRecording);
-  }, [isRecording, onRecordingStateChange]);
+    onRecordingStateChange?.(isActive);
+  }, [isActive, onRecordingStateChange]);
 
-  // Auto-start recording when modal becomes visible
+  // Dictation timer (native mode)
   useEffect(() => {
-    if (visible && autoStart && !hasAutoStarted && !isRecording) {
+    if (recognizing) {
+      dictationStartRef.current = Date.now();
+      dictationTimerRef.current = setInterval(() => {
+        if (dictationStartRef.current) {
+          setDictationDurationMs(Date.now() - dictationStartRef.current);
+        }
+      }, 50);
+    } else {
+      if (dictationTimerRef.current) {
+        clearInterval(dictationTimerRef.current);
+        dictationTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (dictationTimerRef.current) {
+        clearInterval(dictationTimerRef.current);
+      }
+    };
+  }, [recognizing]);
+
+  const startDictation = useCallback(async () => {
+    if (!SpeechModule) return;
+    const result = await SpeechModule.requestPermissionsAsync();
+    if (!result.granted) {
+      console.warn('Speech recognition permissions not granted');
+      return;
+    }
+    setTranscript('');
+    transcriptRef.current = '';
+    setDictationDurationMs(0);
+    SpeechModule.start({
+      lang: 'es-ES',
+      interimResults: true,
+      continuous: true,
+      maxAlternatives: 1,
+      addsPunctuation: true,
+    });
+  }, []);
+
+  // Auto-start when modal becomes visible
+  useEffect(() => {
+    if (visible && autoStart && !hasAutoStarted && !isActive) {
       setHasAutoStarted(true);
-      start();
+      if (useNativeSpeech) {
+        startDictation();
+      } else {
+        start();
+      }
     }
     if (!visible) {
       setHasAutoStarted(false);
+      setTranscript('');
+      transcriptRef.current = '';
+      setDictationDurationMs(0);
+      setGeminiTranscribing(false);
       setWaveformData(new Array(WAVEFORM_BARS).fill(0));
       waveformRef.current = new Array(WAVEFORM_BARS).fill(0);
     }
-  }, [visible, autoStart, hasAutoStarted, isRecording, start]);
+  }, [visible, autoStart, hasAutoStarted, isActive, useNativeSpeech, start, startDictation]);
 
-  // Update waveform data when metering changes
+  // Update waveform from audio metering (gallery mode + Gemini fallback)
   useEffect(() => {
-    if (isRecording) {
+    if (!useNativeSpeech && isRecording) {
       const normalized = normalizeLevel(meteringLevel);
-      // Shift waveform data and add new value
       const newData = [...waveformRef.current.slice(1), normalized];
       waveformRef.current = newData;
       setWaveformData(newData);
     }
-  }, [meteringLevel, isRecording]);
+  }, [meteringLevel, isRecording, useNativeSpeech]);
 
-  // Stop and save recording, then close
+  // Stop and save/complete
   const stopSaveAndClose = async () => {
-    if (!isRecording) {
+    if (!isActive && !geminiTranscribing) {
       onClose();
       return;
     }
 
     setSaving(true);
     try {
+      if (useNativeSpeech) {
+        // Native: stop speech recognition and pass transcript
+        SpeechModule.stop();
+        await new Promise((r) => setTimeout(r, 300));
+        const finalText = transcriptRef.current.trim();
+        if (finalText) {
+          onTranscription!(finalText);
+        }
+        onRecordingComplete();
+        return;
+      }
+
+      // Stop audio recording (used by both gallery and Gemini fallback)
       const result = await stop();
 
+      if (useGeminiFallback && result?.uri) {
+        // Gemini fallback: transcribe the recorded audio via API
+        setGeminiTranscribing(true);
+        try {
+          const text = await transcribeAudio(result.uri);
+
+          // Upload audio + transcription to Supabase
+          try {
+            await uploadMedia(new Blob(), 'audio', {
+              userId,
+              duration: result.duration,
+              transcription: text.trim(),
+              fileUri: result.uri,
+            });
+          } catch (uploadErr) {
+            console.warn('Audio upload failed (transcription still saved):', uploadErr);
+          }
+
+          discard();
+          if (text.trim()) {
+            onTranscription!(text.trim());
+          }
+          onRecordingComplete();
+        } catch (error) {
+          console.error('Gemini transcription failed:', error);
+          discard();
+          onClose();
+        } finally {
+          setGeminiTranscribing(false);
+        }
+        return;
+      }
+
+      // Gallery mode: upload actual audio file to Supabase
       if (result?.uri) {
-        // Upload immediately
-        const response = await fetch(result.uri);
-        const blob = await response.blob();
-        await uploadMedia(blob, 'audio', {
+        await uploadMedia(new Blob(), 'audio', {
           userId,
           duration: result.duration,
+          fileUri: result.uri,
         });
       }
 
@@ -144,41 +302,40 @@ const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
   // Expose imperative methods
   useImperativeHandle(ref, () => ({
     startRecording: () => {
-      if (!isRecording) {
-        start();
+      if (!isActive) {
+        if (useNativeSpeech) {
+          startDictation();
+        } else {
+          start();
+        }
       }
     },
     stopAndClose: stopSaveAndClose,
-  }), [isRecording, start, stopSaveAndClose]);
+  }), [isActive, useNativeSpeech, start, startDictation, stopSaveAndClose]);
 
   const handleClose = async () => {
-    if (isRecording) {
+    if (useNativeSpeech && recognizing) {
+      SpeechModule.abort();
+    } else if (isRecording) {
       await cancel();
     }
-    discard();
+    if (!useNativeSpeech) discard();
     onClose();
   };
 
-  // Render waveform bars
-  const renderWaveform = () => {
-    return (
-      <View style={styles.waveformContainer}>
-        {waveformData.map((level, index) => {
-          // Add some variation and minimum height
-          const height = Math.max(2, level * MAX_BAR_HEIGHT);
-          return (
-            <View
-              key={index}
-              style={[
-                styles.waveformBar,
-                { height },
-              ]}
-            />
-          );
-        })}
-      </View>
-    );
-  };
+  const renderWaveform = () => (
+    <View style={styles.waveformContainer}>
+      {waveformData.map((level, index) => {
+        const height = Math.max(2, level * MAX_BAR_HEIGHT);
+        return (
+          <View
+            key={index}
+            style={[styles.waveformBar, { height }]}
+          />
+        );
+      })}
+    </View>
+  );
 
   return (
     <Modal
@@ -188,37 +345,51 @@ const RecordingModal = forwardRef<RecordingModalRef, RecordingModalProps>(({
       onRequestClose={handleClose}
     >
       <View style={styles.overlay}>
-        {/* Tap backdrop to cancel */}
         <TouchableOpacity
           style={styles.backdrop}
           activeOpacity={1}
           onPress={handleClose}
         />
 
-        {/* Bottom sheet */}
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
-          {/* Handle bar */}
           <View style={styles.handleContainer}>
             <View style={styles.handle} />
           </View>
 
-          {/* Title */}
-          <Text style={styles.title}>New Recording {recordingNumber}</Text>
-
-          {/* Timer */}
-          <Text style={styles.timer}>
-            {formatDurationWithCentiseconds(durationMs)}
+          <Text style={styles.title}>
+            {isDictation ? 'Dictado de voz' : `New Recording ${recordingNumber}`}
           </Text>
 
-          {/* Waveform */}
-          {renderWaveform()}
+          <Text style={styles.timer}>
+            {formatDurationWithCentiseconds(currentDurationMs)}
+          </Text>
 
-          {/* Stop button */}
+          {/* Live transcript (native dictation) */}
+          {useNativeSpeech && (
+            <ScrollView style={styles.transcriptContainer} contentContainerStyle={styles.transcriptContent}>
+              <Text style={styles.transcriptText}>
+                {transcript || 'Escuchando...'}
+              </Text>
+            </ScrollView>
+          )}
+
+          {/* Gemini fallback: show waveform while recording, then spinner */}
+          {useGeminiFallback && !geminiTranscribing && renderWaveform()}
+          {geminiTranscribing && (
+            <View style={styles.transcribingContainer}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.transcribingText}>Transcribiendo...</Text>
+            </View>
+          )}
+
+          {/* Gallery mode: waveform */}
+          {!isDictation && renderWaveform()}
+
           <TouchableOpacity
             style={styles.stopButton}
             onPress={stopSaveAndClose}
             activeOpacity={0.8}
-            disabled={saving}
+            disabled={saving || geminiTranscribing}
           >
             <View style={styles.stopButtonInner} />
           </TouchableOpacity>
@@ -272,6 +443,33 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 4,
     fontVariant: ['tabular-nums'],
+  },
+  transcriptContainer: {
+    maxHeight: 100,
+    width: SCREEN_WIDTH - 48,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  transcriptContent: {
+    paddingHorizontal: 8,
+  },
+  transcriptText: {
+    fontSize: 17,
+    color: colors.text,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  transcribingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 24,
+    marginBottom: 24,
+  },
+  transcribingText: {
+    fontSize: 15,
+    color: colors.textMuted,
+    fontStyle: 'italic',
   },
   waveformContainer: {
     flexDirection: 'row',

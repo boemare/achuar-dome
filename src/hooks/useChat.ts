@@ -12,7 +12,7 @@ interface UseChatResult {
   loading: boolean;
   sending: boolean;
   conversationId: string | null;
-  send: (content: string, imageUrl?: string | null) => Promise<void>;
+  send: (content: string, imageUrl?: string | null, audioUrl?: string | null) => Promise<void>;
   addUserMessage: (content: string, conversationIdOverride?: string | null) => Promise<void>;
   startNewConversation: () => Promise<string | null>;
   loadConversation: (id: string) => Promise<void>;
@@ -53,7 +53,7 @@ export function useChat(userId?: string, isReady: boolean = false): UseChatResul
   }, []);
 
   const send = useCallback(
-    async (content: string, imageUrl?: string | null) => {
+    async (content: string, imageUrl?: string | null, audioUrl?: string | null) => {
       if (!conversationId || !content.trim()) return;
 
       setSending(true);
@@ -63,12 +63,13 @@ export function useChat(userId?: string, isReady: boolean = false): UseChatResul
         id: `temp_${Date.now()}`,
         role: 'user',
         content: content.trim(),
+        audioUrl: audioUrl || undefined,
         createdAt: new Date(),
       };
       setMessages((prev) => [...prev, userMessage]);
 
       // Save user message
-      const savedUserMessage = await saveMessage(conversationId, 'user', content.trim());
+      const savedUserMessage = await saveMessage(conversationId, 'user', content.trim(), audioUrl || undefined);
       if (savedUserMessage) {
         setMessages((prev) =>
           prev.map((m) => (m.id === userMessage.id ? savedUserMessage : m))

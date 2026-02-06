@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { colors } from '../../constants/colors';
@@ -12,6 +12,8 @@ interface ChatInputProps {
   onAttachPress?: () => void;
   disabled?: boolean;
   placeholder?: string;
+  externalText?: string;
+  onExternalTextConsumed?: () => void;
 }
 
 // Send arrow icon
@@ -66,8 +68,17 @@ export default function ChatInput({
   onAttachPress,
   disabled = false,
   placeholder = t('askAboutWildlife'),
+  externalText,
+  onExternalTextConsumed,
 }: ChatInputProps) {
   const [text, setText] = useState('');
+
+  useEffect(() => {
+    if (externalText) {
+      setText(externalText);
+      onExternalTextConsumed?.();
+    }
+  }, [externalText, onExternalTextConsumed]);
 
   const handleSend = () => {
     if (text.trim() && !disabled) {

@@ -16,19 +16,43 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.berlanpa.achuar",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Allow access to your photos to upload wildlife images."
+        "NSPhotoLibraryUsageDescription": "Allow access to your photos to upload wildlife images.",
+        "NSSpeechRecognitionUsageDescription": "Permitir que Achuar use el reconocimiento de voz.",
+        "NSMicrophoneUsageDescription": "Permitir que Achuar use el micrófono para dictado de voz.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
+      "package": "com.berlanpa.achuar",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Permitir que Achuar use el micrófono para dictado de voz.",
+          "speechRecognitionPermission": "Permitir que Achuar use el reconocimiento de voz.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d1f81936-4ec0-4eff-bb78-35f5f66ef30a"
+      }
     }
   }
 }

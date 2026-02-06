@@ -155,6 +155,15 @@ export default function ChatScreen() {
   const [recordingNumber, setRecordingNumber] = useState(1);
   const [historyItems, setHistoryItems] = useState<LocalConversation[]>([]);
   const historyRef = useRef<LocalConversation[]>([]);
+  const [transcribedText, setTranscribedText] = useState('');
+
+  const handleTranscription = useCallback((text: string) => {
+    setTranscribedText(text);
+  }, []);
+
+  const handleExternalTextConsumed = useCallback(() => {
+    setTranscribedText('');
+  }, []);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -485,6 +494,8 @@ export default function ChatScreen() {
           onMicPress={handleMicPress}
           onAttachPress={handleAttachPress}
           disabled={sending || loading}
+          externalText={transcribedText}
+          onExternalTextConsumed={handleExternalTextConsumed}
         />
             <Text style={styles.welcomeHint}>
               {t('askAboutAmazon')}
@@ -514,6 +525,7 @@ export default function ChatScreen() {
           visible={showRecordingModal}
           onClose={() => setShowRecordingModal(false)}
           onRecordingComplete={handleRecordingComplete}
+          onTranscription={handleTranscription}
           userId={user?.id}
           autoStart={true}
           recordingNumber={recordingNumber}
@@ -636,6 +648,8 @@ export default function ChatScreen() {
               onMicPress={handleMicPress}
               onAttachPress={handleAttachPress}
               disabled={sending || loading}
+              externalText={transcribedText}
+              onExternalTextConsumed={handleExternalTextConsumed}
             />
         </View>
         <PatternLockModal />
@@ -643,6 +657,7 @@ export default function ChatScreen() {
           visible={showRecordingModal}
           onClose={() => setShowRecordingModal(false)}
           onRecordingComplete={handleRecordingComplete}
+          onTranscription={handleTranscription}
           userId={user?.id}
           autoStart={true}
           recordingNumber={recordingNumber}

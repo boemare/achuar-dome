@@ -1,3 +1,5 @@
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode } from 'base64-arraybuffer';
 import { supabase, STORAGE_BUCKET } from './client';
 import { MediaItem, MediaType, MediaFilter } from '../../types/media';
 
@@ -212,6 +214,8 @@ export async function uploadMedia(
     userId?: string;
     speciesId?: string;
     duration?: number;
+    transcription?: string;
+    fileUri?: string;
   }
 ): Promise<MediaItem | null> {
   const timestamp = Date.now();
@@ -219,12 +223,26 @@ export async function uploadMedia(
   const folder = type === 'audio' ? 'voice' : `${type}s`;
   const path = `${folder}/${timestamp}.${extension}`;
 
-  // Upload to storage
-  const { error: uploadError } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file);
+  // For audio files, read the actual bytes via expo-file-system for a reliable upload
+  if (type === 'audio' && metadata.fileUri) {
+    const fs = FileSystem as any;
+    const base64 = await fs.readAsStringAsync(metadata.fileUri, { encoding: 'base64' });
+    const { error: uploadError } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(path, decode(base64), { contentType: 'audio/m4a' });
 
-  if (uploadError) {
-    console.error('Error uploading file:', uploadError);
-    return null;
+    if (uploadError) {
+      console.error('Error uploading audio file:', uploadError);
+      return null;
+    }
+  } else {
+    // Upload blob (photos, videos, or audio without a fileUri)
+    const { error: uploadError } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file);
+
+    if (uploadError) {
+      console.error('Error uploading file:', uploadError);
+      return null;
+    }
   }
 
   // Create database record
@@ -257,6 +275,7 @@ export async function uploadMedia(
         user_id: metadata.userId,
         species_id: metadata.speciesId,
         duration: metadata.duration,
+        transcription: metadata.transcription || null,
       };
       break;
   }
