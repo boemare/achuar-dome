@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserRole, AuthContextType, User } from '../types/auth';
 import { supabase } from '../services/supabase/client';
 
@@ -7,6 +8,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 interface AuthProviderProps {
   children: ReactNode;
 }
+
+const DEVICE_USER_ID_KEY = 'achuar_device_user_id';
 
 // Generate a proper UUID v4
 function generateUUID(): string {
@@ -24,45 +27,54 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [role, setRole] = useState<UserRole | null>('general');
   const [initialized, setInitialized] = useState(false);
 
-  // Create the default general user on app start
+  // Restore or create device-scoped user on app start
   useEffect(() => {
     if (!initialized) {
       const initUser = async () => {
+        // Check for a previously persisted user ID on this device
+        const storedUserId = await AsyncStorage.getItem(DEVICE_USER_ID_KEY);
+
+        if (storedUserId) {
+          // Try to fetch the existing user from Supabase
+          const { data: existingUser } = await supabase
+            .from('users')
+            .select('id, role, created_at')
+            .eq('id', storedUserId)
+            .single();
+
+          if (existingUser) {
+            setUser({
+              id: existingUser.id,
+              role: existingUser.role as UserRole,
+              createdAt: new Date(existingUser.created_at),
+            });
+            setRole(existingUser.role as UserRole);
+            setInitialized(true);
+            return;
+          }
+        }
+
+        // No stored ID or user was deleted — create a new one
         const userId = generateUUID();
 
-        // Try to create user in database
         const { data, error } = await supabase
           .from('users')
-          .insert({ id: userId, role: 'general' })
+          .insert({ id: userId, role: 'general', device_id: userId })
           .select()
           .single();
 
+        const finalId = data?.id || userId;
+        await AsyncStorage.setItem(DEVICE_USER_ID_KEY, finalId);
+
         if (error) {
-          console.log('Error creating default user, retrying...', error);
-          // Retry once with a new UUID
-          const retryId = generateUUID();
-          const { data: retryData, error: retryError } = await supabase
-            .from('users')
-            .insert({ id: retryId, role: 'general' })
-            .select()
-            .single();
-
-          if (retryError) {
-            console.log('Retry failed, using local user:', retryError);
-          }
-
-          setUser({
-            id: retryData?.id || retryId,
-            role: 'general',
-            createdAt: new Date(retryData?.created_at || Date.now()),
-          });
-        } else {
-          setUser({
-            id: data.id,
-            role: 'general',
-            createdAt: new Date(data.created_at),
-          });
+          console.log('Error creating default user:', error);
         }
+
+        setUser({
+          id: finalId,
+          role: 'general',
+          createdAt: new Date(data?.created_at || Date.now()),
+        });
 
         setInitialized(true);
       };
@@ -71,28 +83,42 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [initialized]);
 
   const login = useCallback(async (userRole: UserRole) => {
-    // Create user in Supabase
+    // If upgrading current user to elder, update in place
+    if (user && userRole === 'elder') {
+      await supabase
+        .from('users')
+        .update({ role: 'elder' })
+        .eq('id', user.id);
+
+      setUser({ ...user, role: 'elder' });
+      setRole('elder');
+      return;
+    }
+
+    // Otherwise create a new user
     const userId = generateUUID();
     const { data, error } = await supabase
       .from('users')
-      .insert({ id: userId, role: userRole })
+      .insert({ id: userId, role: userRole, device_id: userId })
       .select()
       .single();
 
     if (error) {
       console.error('Error creating user:', error);
-      // Still allow login locally even if DB fails
     }
 
+    const finalId = data?.id || userId;
+    await AsyncStorage.setItem(DEVICE_USER_ID_KEY, finalId);
+
     const newUser: User = {
-      id: data?.id || userId,
+      id: finalId,
       role: userRole,
       createdAt: new Date(data?.created_at || Date.now()),
     };
     setUser(newUser);
     setRole(userRole);
     setIsAuthenticated(true);
-  }, []);
+  }, [user]);
 
   const logout = useCallback(() => {
     setUser(null);
