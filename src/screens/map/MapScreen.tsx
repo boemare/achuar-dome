@@ -11,7 +11,19 @@ import {
   PanResponder,
   Animated,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+// react-native-maps is a native module — load dynamically to avoid crashing Expo Go
+let MapView: any = null;
+let Marker: any = null;
+let PROVIDER_GOOGLE: any = null;
+type Region = { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number };
+try {
+  const Maps = require('react-native-maps');
+  MapView = Maps.default;
+  Marker = Maps.Marker;
+  PROVIDER_GOOGLE = Maps.PROVIDER_GOOGLE;
+} catch {
+  // Module not available — fallback UI will render instead
+}
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
@@ -209,6 +221,17 @@ export default function MapScreen() {
       </View>
     );
   };
+
+  if (!MapView) {
+    return (
+      <View style={[styles.container, styles.fallbackContainer]}>
+        <Text style={styles.fallbackText}>{t('mapObservations')}</Text>
+        <Text style={styles.fallbackSubtext}>
+          Maps require a development build.{'\n'}Run "npx expo run:android" to enable.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -471,5 +494,21 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 3,
     borderBottomLeftRadius: 3,
     marginRight: 2,
+  },
+  fallbackContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+  },
+  fallbackText: {
+    ...typography.h3,
+    color: colors.primary,
+    marginBottom: spacing.sm,
+  },
+  fallbackSubtext: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
 });
